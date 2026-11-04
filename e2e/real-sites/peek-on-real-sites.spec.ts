@@ -24,6 +24,9 @@ type RealSite = {
   readonly inPeekLinkSelector?: string;
 };
 
+/** Visited before each site, so Back can be checked to still leave the site after peeking. */
+const PREVIOUS_PAGE = "https://example.com/";
+
 /** Google's EU cookie wall on YouTube; answered whenever it gets in the way of a click. */
 const GOOGLE_COOKIE_WALL_REJECT = 'button[aria-label^="Reject"], button:has-text("Reject all")';
 
@@ -91,6 +94,7 @@ for (const site of REAL_SITES) {
     const extensionProblems = collectExtensionProblems(context);
     const cookieWall = page.locator(GOOGLE_COOKIE_WALL_REJECT).first();
     await page.addLocatorHandler(cookieWall, () => cookieWall.click());
+    await page.goto(PREVIOUS_PAGE, { waitUntil: "domcontentloaded" });
     await page.goto(site.pageUrl, { waitUntil: "domcontentloaded" });
     const hostUrl = page.url();
     const tabsBefore = context.pages().length;
@@ -131,6 +135,9 @@ for (const site of REAL_SITES) {
     expect(page.url(), "the page behind the peek must not navigate").toBe(hostUrl);
     expect(context.pages(), "only expanding opens a tab").toHaveLength(tabsBefore + 1);
     expect(extensionProblems).toEqual([]);
+
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    expect(page.url(), "Back leaves the page as if no peek had been there").toBe(PREVIOUS_PAGE);
   });
 }
 
