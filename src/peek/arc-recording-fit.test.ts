@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type CubicBezierEasing, type FadeTiming, PEEK_MOTION } from "./motion-tokens.ts";
 import { type Spring, springCurve } from "./spring.ts";
+import { ms } from "./units.ts";
 
 /**
  * Normalised progress of Arc's Peek, measured frame by frame from a 60 fps recording of Arc 1.171
@@ -23,6 +24,19 @@ const ARC_OPEN_PANE: readonly (readonly [number, number])[] = [
   [263, 1.004],
   [313, 1.002],
   [363, 1],
+];
+/**
+ * The pane's height, from the rects measured at 918-1002 ms (top and bottom edges), as progress from the
+ * link's 20 pt line to the resting height (1313 pt), against ms after the pane's horizontal departure
+ * (889 ms). Only these six frames show the height before it leaves the recording.
+ */
+const ARC_OPEN_PANE_HEIGHT: readonly (readonly [number, number])[] = [
+  [29, 0.08],
+  [46, 0.201],
+  [63, 0.359],
+  [79, 0.526],
+  [96, 0.678],
+  [113, 0.804],
 ];
 const ARC_CLOSE_PANE: readonly (readonly [number, number])[] = [
   [25, 0.212],
@@ -94,10 +108,41 @@ describe("the motion follows Arc's recorded Peek", () => {
     ).toBeLessThan(0.03);
   });
 
+  test("the pane's height follows its own, later spring (weaker data: six frames, within 0.05)", () => {
+    const heightAt = (t: number): number =>
+      springProgressAt(PEEK_MOTION.openSpringVertical, t - PEEK_MOTION.openVerticalLag);
+
+    expect(largestMiss(ARC_OPEN_PANE_HEIGHT, heightAt)).toBeLessThan(0.05);
+  });
+
+  test("the height lags the width at every frame Arc's height was seen, as in Arc", () => {
+    for (const [elapsedMs, arcHeight] of ARC_OPEN_PANE_HEIGHT) {
+      const arcWidth = ARC_OPEN_PANE.find(([each]) => each === elapsedMs)?.[1] ?? 0;
+      const ourWidth = springProgressAt(PEEK_MOTION.openSpring, elapsedMs);
+      const ourHeight = springProgressAt(
+        PEEK_MOTION.openSpringVertical,
+        elapsedMs - PEEK_MOTION.openVerticalLag,
+      );
+      expect(arcHeight).toBeLessThan(arcWidth);
+      expect(ourHeight).toBeLessThan(ourWidth);
+    }
+  });
+
   test("the pane closes on Arc's spring", () => {
     expect(
       largestMiss(ARC_CLOSE_PANE, (t) => springProgressAt(PEEK_MOTION.closeSpring, t)),
     ).toBeLessThan(0.03);
+  });
+
+  test("the pane's bottom edge closes faster than its right edge, as Arc's does", () => {
+    const vertical = springCurve(
+      PEEK_MOTION.closeSpringVertical,
+      PEEK_MOTION.springSettleTolerance,
+    );
+    const horizontal = springCurve(PEEK_MOTION.closeSpring, PEEK_MOTION.springSettleTolerance);
+
+    expect(PEEK_MOTION.closeSpringVertical.response).toBe(ms(157));
+    expect(vertical.duration).toBeLessThan(horizontal.duration);
   });
 
   test("the scrim fades in and out like Arc's", () => {

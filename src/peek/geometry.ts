@@ -40,6 +40,18 @@ export const IDENTITY_TRANSFORM: BoxTransform = {
   scaleY: 1,
 };
 
+/** What a Peek grows out of and shrinks back into: the link, the top of its row, and whether the row was copied. */
+export type PeekOriginShape = {
+  readonly link: Rect;
+  readonly rowTop: number;
+  readonly hasRowSnapshot: boolean;
+};
+
+/** Arc closes a Peek into a line without height at the top of the link's row, not into the link's box. */
+export function collapsedLine({ link, rowTop }: PeekOriginShape): Rect {
+  return { x: link.x, y: rowTop, width: link.width, height: 0 };
+}
+
 export function peekLayout(viewport: ViewportSize): PeekLayout {
   const width = viewport.width * PEEK_LAYOUT.paneWidthRatio;
   const height = Math.max(0, viewport.height - 2 * PEEK_LAYOUT.paneVerticalInset);

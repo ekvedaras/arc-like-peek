@@ -9,6 +9,7 @@ import {
 import {
   type BoxTransform,
   type PeekLayout,
+  type PeekOriginShape,
   type Point,
   peekLayout,
   peekOriginRect,
@@ -18,10 +19,13 @@ import {
 import type { PeekLink } from "../links.ts";
 import { type PeekKeyCommand, peekKeyCommand } from "../peek-keyboard.ts";
 import type { DismissMechanism, PeekPhase } from "../peek-session.ts";
+import { type ColourScheme, peekTint } from "../peek-tint.ts";
 import type { PeekableUrl } from "../peek-trigger.ts";
 import { PEEKED_PAGE_PERMISSIONS } from "../peeked-page-permissions.ts";
 import { type ControlIcon, createControlIcon } from "./control-icons.ts";
+import { cssColourParser, pageColour } from "./page-colour.ts";
 import { PEEK_OVERLAY_STYLES } from "./peek-overlay-styles.ts";
+import { type RowSnapshot, rowOf, snapshotRow } from "./row-snapshot.ts";
 import { lockPageScroll, type ScrollLock } from "./scroll-lock.ts";
 
 /** The link a Peek grows out of, shrinks back into and returns focus to. */
@@ -62,6 +66,7 @@ export function mountPeekOverlay(
   let layout: PeekLayout | null = null;
   let scrollLock: ScrollLock | null = null;
   let running: Animation[] = [];
+  let rowSnapshot: RowSnapshot | null = null;
 
   const view = document.defaultView;
   const motionPreference = (): MotionPreference =>
@@ -80,13 +85,44 @@ export function mountPeekOverlay(
     parts.controls.style.left = `${next.controlsRail.x}px`;
     parts.controls.style.top = `${next.controlsRail.y}px`;
     parts.controls.dataset["position"] = next.controlsRail.position;
+    fitSnapshot(next.pane);
     layout = next;
     return next;
   };
 
-  const originRect = (origin: PeekOrigin): Rect | null => {
+  const originShape = (origin: PeekOrigin): PeekOriginShape | null => {
     if (!origin.link.isConnected) return null;
-    return peekOriginRect([...origin.link.getClientRects()], origin.pointer, viewport());
+    const link = peekOriginRect([...origin.link.getClientRects()], origin.pointer, viewport());
+    if (!link) return null;
+    return {
+      link,
+      rowTop: rowOf(origin.link).getBoundingClientRect().top,
+      hasRowSnapshot: rowSnapshot !== null,
+    };
+  };
+
+  const fitSnapshot = (pane: Rect): void => {
+    if (!rowSnapshot) return;
+    // The picture is stretched over the whole pane, so it is enlarged as the pane grows.
+    const { rect } = rowSnapshot;
+    Object.assign(parts.snapshot.style, {
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      transform: `scale(${pane.width / rect.width}, ${pane.height / rect.height})`,
+    });
+  };
+
+  const applyTint = (): void => {
+    const scheme: ColourScheme = view?.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+    const tint = peekTint(pageColour(document, cssColourParser(parts.dialog)), scheme);
+    if (!tint) return;
+    const style = parts.dialog.style;
+    style.setProperty("--peek-scrim-tint", tint.scrim);
+    style.setProperty("--peek-control-background", tint.controlBackground);
+    style.setProperty("--peek-control-background-hover", tint.controlBackgroundHover);
+    style.setProperty("--peek-control-glyph", tint.controlGlyph);
   };
 
   const play = (steps: readonly MotionStep[]): Promise<void> => {
@@ -123,17 +159,21 @@ export function mountPeekOverlay(
       // window has loaded; Esc must still close a Peek that is only just opening.
       parts.page.contentWindow?.addEventListener("keydown", onKeyDown, true);
       view?.addEventListener("resize", onResize);
+      rowSnapshot = origin.link.isConnected ? snapshotRow(origin.link) : null;
+      if (rowSnapshot) parts.snapshot.replaceChildren(rowSnapshot.element);
+      applyTint();
       scrollLock = lockPageScroll(document);
       parts.dialog.showModal();
       const { pane } = applyLayout();
-      return play(openChoreography(pane, originRect(origin), motionPreference()));
+      return play(openChoreography(pane, originShape(origin), motionPreference()));
     },
     load: (url) => {
       parts.page.src = peekWindowAddressFor(url);
     },
     dismiss: (origin) => {
       const pane = (layout ?? applyLayout()).pane;
-      return play(dismissChoreography(pane, originRect(origin), motionPreference()));
+      const paneNow = currentTransformOf(parts.pane);
+      return play(dismissChoreography(pane, originShape(origin), paneNow, motionPreference()));
     },
     expand: () => {
       const pane = (layout ?? applyLayout()).pane;
@@ -170,6 +210,7 @@ type OverlayParts = {
   readonly scrim: HTMLDivElement;
   readonly pane: HTMLDivElement;
   readonly page: HTMLIFrameElement;
+  readonly snapshot: HTMLDivElement;
   readonly controls: HTMLDivElement;
 };
 
@@ -191,7 +232,9 @@ function buildOverlay(document: Document, intents: PeekOverlayIntents): OverlayP
   page.title = "Peek";
   page.allow = PEEKED_PAGE_PERMISSIONS;
   page.autofocus = true;
-  pane.append(page);
+  const snapshot = element(document, "div", "peek-snapshot");
+  snapshot.setAttribute("aria-hidden", "true");
+  pane.append(page, snapshot);
 
   const controls = element(document, "div", "peek-controls");
   controls.setAttribute("role", "toolbar");
@@ -203,7 +246,7 @@ function buildOverlay(document: Document, intents: PeekOverlayIntents): OverlayP
 
   dialog.append(scrim, pane, controls);
   shadow.append(dialog);
-  return { host, dialog, scrim, pane, page, controls };
+  return { host, dialog, scrim, pane, page, snapshot, controls };
 }
 
 function controlButton(
@@ -255,5 +298,7 @@ function partElement(parts: OverlayParts, part: OverlayPart): HTMLElement {
       return parts.page;
     case "controls":
       return parts.controls;
+    case "snapshot":
+      return parts.snapshot;
   }
 }

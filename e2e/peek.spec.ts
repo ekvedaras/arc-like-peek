@@ -2,6 +2,7 @@ import type { Frame, Page } from "@playwright/test";
 import { PEEK_OPEN_CURVE } from "../src/peek/choreography.ts";
 import { peekLayout } from "../src/peek/geometry.ts";
 import { PEEK_MOTION } from "../src/peek/motion-tokens.ts";
+import { springCurve } from "../src/peek/spring.ts";
 import {
   type AnimationSample,
   cubicBezier,
@@ -149,6 +150,113 @@ test.describe("opening a peek", () => {
     expect(presentSamples(pane).every((sample) => sample.scaleX === 1)).toBe(true);
     const fade = measureTransition(pane, "opacity");
     expect(durationMismatchMs(fade, PEEK_MOTION.reducedMotionFade.duration)).toBeLessThan(80);
+  });
+});
+
+test.describe("Arc's finer motion", () => {
+  test("the pane's height sets off after its width and follows its own spring", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/links.html"));
+
+    const pane = await traceAnimation(
+      page,
+      PEEK_SELECTORS.pane,
+      () => shiftClick(page.locator("#cross-site-link")),
+      { durationMs: 900 },
+    );
+
+    const width = measureTransition(pane, "scaleX");
+    const height = measureTransition(pane, "scaleY");
+    const progressOf = (sample: AnimationSample, property: "scaleX" | "scaleY"): number => {
+      const { from, to } = property === "scaleX" ? width : height;
+      return (sample[property] - from) / (to - from);
+    };
+    const early = presentSamples(pane).filter(
+      (sample) => progressOf(sample, "scaleX") > 0.15 && progressOf(sample, "scaleX") < 0.9,
+    );
+    expect(early.length).toBeGreaterThan(2);
+    for (const sample of early) {
+      expect(progressOf(sample, "scaleY")).toBeLessThan(progressOf(sample, "scaleX"));
+    }
+    const vertical = springCurve(PEEK_MOTION.openSpringVertical, PEEK_MOTION.springSettleTolerance);
+    const lag = PEEK_MOTION.openVerticalLag;
+    expect(
+      maxDeviationFromEasing(
+        pane,
+        "scaleY",
+        (progress) =>
+          vertical.progressAt(
+            Math.max(0, progress * (vertical.duration + lag) - lag) / vertical.duration,
+          ),
+        height,
+      ),
+    ).toBeLessThan(0.1);
+  });
+
+  test("a snapshot of the link's row covers the pane at first and fades out", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/links.html"));
+
+    const snapshot = await traceAnimation(
+      page,
+      PEEK_SELECTORS.snapshot,
+      () => shiftClick(page.locator("#cross-site-link")),
+      { durationMs: 400 },
+    );
+
+    const seen = presentSamples(snapshot);
+    expect(Math.max(...seen.map((sample) => sample.opacity))).toBeGreaterThan(0.5);
+    expect(seen.at(-1)?.opacity).toBe(0);
+    expect(isMonotonic(snapshot, "opacity")).toBe(true);
+    await expect(peekOverlay(page).snapshot).toContainText("Cross-site article");
+  });
+
+  test("closing collapses the pane into a line without height at the top of the link's row", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/links.html"));
+    const row = await rectOf(page.locator("li:has(#cross-site-link)"));
+    await openPeek(page, "#cross-site-link");
+
+    const pane = await traceAnimation(
+      page,
+      PEEK_SELECTORS.pane,
+      () => page.keyboard.press("Escape"),
+      { durationMs: 700 },
+    );
+
+    const last = presentSamples(pane).at(-1);
+    if (!last) throw new Error("The pane was never traced");
+    expect(last.rect.height).toBeLessThan(0.05 * (await rectOf(page.locator("body"))).height);
+    expect(Math.abs(last.rect.y - row.y)).toBeLessThan(0.05 * 700);
+    expect(isMonotonic(pane, "scaleY")).toBe(true);
+    await expectNoPeek(page);
+  });
+
+  test("the scrim and controls take the page's theme colour", async ({ page, fixtureServer }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto(fixtureServer.url("/themed-links.html"));
+    await openPeek(page, "#cross-site-link");
+
+    const [red = 0, green = 0, blue = 0] = (
+      (
+        await peekOverlay(page).closeButton.evaluate(
+          (button) => getComputedStyle(button).backgroundColor,
+        )
+      ).match(/\d+/g) ?? []
+    ).map(Number);
+    expect(green).toBeGreaterThan(red);
+    expect(green).toBeGreaterThan(blue);
+    const scrim = await peekOverlay(page).scrim.evaluate(
+      (each) => getComputedStyle(each).backgroundColor,
+    );
+    const [scrimRed = 0, scrimGreen = 0] = (scrim.match(/[\d.]+/g) ?? []).map(Number);
+    expect(scrimGreen).toBeGreaterThan(scrimRed);
   });
 });
 

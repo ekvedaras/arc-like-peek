@@ -1,8 +1,10 @@
 import {
   type BoxTransform,
+  collapsedLine,
   cssTransform,
   IDENTITY_TRANSFORM,
   interpolateTransform,
+  type PeekOriginShape,
   pinnedToViewport,
   type Rect,
   scaleAboutCentre,
@@ -13,7 +15,7 @@ import { type SpringCurve, springCurve } from "./spring.ts";
 import { type DurationMs, ms } from "./units.ts";
 
 /** The animated parts of the overlay. Only `transform` and `opacity` are ever animated. */
-export type OverlayPart = "scrim" | "pane" | "page" | "controls";
+export type OverlayPart = "scrim" | "pane" | "page" | "controls" | "snapshot";
 
 export type MotionStep = {
   readonly part: OverlayPart;
@@ -32,6 +34,28 @@ export type MotionPreference = "full" | "reduced";
 const OPEN_CURVE = springCurve(PEEK_MOTION.openSpring, PEEK_MOTION.springSettleTolerance);
 const CLOSE_CURVE = springCurve(PEEK_MOTION.closeSpring, PEEK_MOTION.springSettleTolerance);
 const EXPAND_CURVE = springCurve(PEEK_MOTION.expandSpring, PEEK_MOTION.springSettleTolerance);
+const OPEN_VERTICAL_CURVE = springCurve(
+  PEEK_MOTION.openSpringVertical,
+  PEEK_MOTION.springSettleTolerance,
+);
+const CLOSE_VERTICAL_CURVE = springCurve(
+  PEEK_MOTION.closeSpringVertical,
+  PEEK_MOTION.springSettleTolerance,
+);
+
+/** A spring for one axis of the pane, set off `lag` after the flight starts. */
+type AxisSpring = { readonly curve: SpringCurve; readonly lag: DurationMs };
+
+const OPEN_HORIZONTAL: AxisSpring = { curve: OPEN_CURVE, lag: ms(0) };
+const OPEN_VERTICAL: AxisSpring = {
+  curve: OPEN_VERTICAL_CURVE,
+  lag: PEEK_MOTION.openVerticalLag,
+};
+const CLOSE_HORIZONTAL: AxisSpring = { curve: CLOSE_CURVE, lag: ms(0) };
+const CLOSE_VERTICAL: AxisSpring = { curve: CLOSE_VERTICAL_CURVE, lag: ms(0) };
+
+/** One sample per frame at 120 Hz is plenty for a transform that is only ever blended linearly. */
+const FLIGHT_SAMPLE_INTERVAL_MS = 8;
 
 export const PEEK_OPEN_CURVE: SpringCurve = OPEN_CURVE;
 export const PEEK_EXPAND_CURVE: SpringCurve = EXPAND_CURVE;
@@ -42,18 +66,21 @@ const EXPAND_KEYFRAMES = 32;
 /** The pane grows out of the link while the scrim fades in, then the controls pop in. */
 export function openChoreography(
   pane: Rect,
-  origin: Rect | null,
+  origin: PeekOriginShape | null,
   motion: MotionPreference,
 ): readonly MotionStep[] {
   if (motion === "reduced" || origin === null) return crossfadeIn();
 
-  const from = transformOnto(pane, origin);
+  const from = transformOnto(pane, origin.link);
   return [
     fade("scrim", 0, 1, PEEK_MOTION.scrimFadeIn, "backwards"),
     ...[
-      spring("pane", from, IDENTITY_TRANSFORM, OPEN_CURVE, "backwards"),
+      flight("pane", from, IDENTITY_TRANSFORM, OPEN_HORIZONTAL, OPEN_VERTICAL, "backwards"),
       fade("pane", 0, 1, PEEK_MOTION.paneFadeIn, "backwards"),
-      ...controlsAppear(pane, origin),
+      ...(origin.hasRowSnapshot
+        ? [fade("snapshot", 1, 0, PEEK_MOTION.snapshotFadeOut, "both")]
+        : []),
+      ...controlsAppear(pane, origin.link),
     ].map(afterPaneDeparture),
   ];
 }
@@ -64,20 +91,29 @@ export function openChoreography(
  */
 export function dismissChoreography(
   pane: Rect,
-  origin: Rect | null,
+  origin: PeekOriginShape | null,
+  paneNow: BoxTransform,
   motion: MotionPreference,
 ): readonly MotionStep[] {
   if (motion === "reduced") return crossfadeOut();
 
-  const to = origin
-    ? transformOnto(pane, origin)
-    : scaleAboutCentre(pane, PEEK_MOTION.dismissInPlaceScale);
-  const curve = CLOSE_CURVE;
   const fadeOut = PEEK_MOTION.paneFadeOutOnDismiss;
+  if (origin === null) {
+    const to = scaleAboutCentre(pane, PEEK_MOTION.dismissInPlaceScale);
+    return [
+      fadeTo("scrim", 0, PEEK_MOTION.scrimFadeOut),
+      springTo("pane", to, CLOSE_CURVE),
+      fadeTo("pane", 0, { ...fadeOut, delay: ms(0), duration: CLOSE_CURVE.duration }),
+      fadeTo("controls", 0, PEEK_MOTION.controlsDisappear),
+    ];
+  }
+
+  const to = transformOnto(pane, collapsedLine(origin));
   return [
     fadeTo("scrim", 0, PEEK_MOTION.scrimFadeOut),
-    springTo("pane", to, curve),
-    fadeTo("pane", 0, origin ? fadeOut : { ...fadeOut, delay: ms(0), duration: curve.duration }),
+    flight("pane", paneNow, to, CLOSE_HORIZONTAL, CLOSE_VERTICAL, "forwards"),
+    fadeTo("pane", 0, fadeOut),
+    ...(origin.hasRowSnapshot ? [fadeTo("snapshot", 1, PEEK_MOTION.snapshotFadeIn)] : []),
     fadeTo("controls", 0, PEEK_MOTION.controlsDisappear),
   ];
 }
@@ -173,6 +209,44 @@ function controlsAppear(pane: Rect, origin: Rect): readonly MotionStep[] {
     spring("controls", fromCorner, IDENTITY_TRANSFORM, OPEN_CURVE, "backwards"),
     fade("controls", 0, 1, PEEK_MOTION.controlsAppear, "backwards"),
   ];
+}
+
+/**
+ * The pane's flight with a spring of its own on each axis: sampled, since one pair of keyframes
+ * cannot carry two curves. Each axis moves its translation and scale together on its own progress.
+ */
+function flight(
+  part: OverlayPart,
+  from: BoxTransform,
+  to: BoxTransform,
+  horizontal: AxisSpring,
+  vertical: AxisSpring,
+  fill: FillMode,
+): MotionStep {
+  const duration = ms(
+    Math.max(horizontal.lag + horizontal.curve.duration, vertical.lag + vertical.curve.duration),
+  );
+  const intervals = Math.ceil(duration / FLIGHT_SAMPLE_INTERVAL_MS);
+  const progressOf = ({ curve, lag }: AxisSpring, elapsedMs: number): number =>
+    elapsedMs <= lag ? 0 : curve.progressAt((elapsedMs - lag) / curve.duration);
+  const keyframes = Array.from({ length: intervals + 1 }, (_, index) => {
+    const offset = index / intervals;
+    const elapsedMs = offset * duration;
+    const x = progressOf(horizontal, elapsedMs);
+    const y = progressOf(vertical, elapsedMs);
+    const between = (start: number, end: number, progress: number): number =>
+      start + (end - start) * progress;
+    return {
+      offset,
+      transform: cssTransform({
+        translateX: between(from.translateX, to.translateX, x),
+        translateY: between(from.translateY, to.translateY, y),
+        scaleX: between(from.scaleX, to.scaleX, x),
+        scaleY: between(from.scaleY, to.scaleY, y),
+      }),
+    };
+  });
+  return { part, keyframes, timing: { duration, delay: ms(0), easing: "linear", fill } };
 }
 
 function spring(

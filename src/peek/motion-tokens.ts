@@ -36,6 +36,13 @@ export const PEEK_LAYOUT = {
   railInsetInsidePane: px(10),
 } as const satisfies Record<string, PixelLength | Ratio>;
 
+export const PEEK_SNAPSHOT = {
+  /** Clone decision: rows taller than this (a whole paragraph around an inline link) are not "a row". */
+  rowMaxHeight: px(120),
+  /** Clone decision: a row with more elements than this is not copied; the link alone is. */
+  rowMaxElements: 150,
+} as const satisfies Record<string, PixelLength | number>;
+
 export const PEEK_SURFACE = {
   /** Measured ≈5–8 pt in flight; the resting corners were outside the recording. */
   paneCornerRadius: px(7),
@@ -48,8 +55,17 @@ export const PEEK_SURFACE = {
 export const PEEK_MOTION = {
   /** MEASURED: the pane's horizontal edges fit this spring to ±1.3 pt (≈0.7 % overshoot, rests ≈360 ms). */
   openSpring: { response: ms(242), dampingRatio: 0.865 } satisfies Spring,
+  /**
+   * MEASURED (weak: six frames before the pane's edges leave the recording, and the fit cannot tell
+   * damping apart, so Arc's 0.865 is kept): the height follows its own spring, set off 15 ms after the
+   * width's, so a wide letterbox opens before the pane gets tall.
+   */
+  openSpringVertical: { response: ms(235), dampingRatio: 0.865 } satisfies Spring,
+  openVerticalLag: ms(15),
   /** MEASURED: critically damped; ≈99 % of the way back into the link after 200 ms. */
   closeSpring: { response: ms(190), dampingRatio: 1 } satisfies Spring,
+  /** MEASURED: the bottom edge fits 157 ms critically damped where the right edge fits 194 ms. */
+  closeSpringVertical: { response: ms(157), dampingRatio: 1 } satisfies Spring,
   /** GUESS: the recording has no expand. Grow to fill the viewport before handing over to a real tab. */
   expandSpring: { response: ms(240), dampingRatio: 1 } satisfies Spring,
   /**
@@ -69,6 +85,11 @@ export const PEEK_MOTION = {
   paneFadeIn: { duration: ms(30), delay: ms(0), easing: EASE_OUT } satisfies FadeTiming,
   /** MEASURED: the pane, squashed into a line over the link, is gone ≈200 ms after Esc. */
   paneFadeOutOnDismiss: { duration: ms(70), delay: ms(130), easing: EASE_IN } satisfies FadeTiming,
+
+  /** MEASURED: the enlarged snapshot of the link's row fades out over ≈80 ms from the pane's first frame. */
+  snapshotFadeOut: { duration: ms(80), delay: ms(0), easing: EASE_OUT } satisfies FadeTiming,
+  /** MEASURED roughly (3835-3952 ms frames): the pane crossfades into the row's snapshot while it shrinks. */
+  snapshotFadeIn: { duration: ms(120), delay: ms(20), easing: EASE_IN } satisfies FadeTiming,
 
   /** MEASURED: 57 % opaque within ≈15 ms, 99 % by 115 ms. */
   scrimFadeIn: {

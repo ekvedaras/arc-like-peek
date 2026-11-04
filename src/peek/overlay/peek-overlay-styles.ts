@@ -84,6 +84,16 @@ export const PEEK_OVERLAY_STYLES = `
   transform-origin: 0 0;
 }
 
+.peek-snapshot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+
 .peek-controls {
   position: absolute;
   display: flex;
