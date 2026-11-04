@@ -10,15 +10,20 @@ Only `bun` is installed (no node/npm). Always go through the package scripts.
 - `bun run build` — bundle `src/` into `dist/` (loadable unpacked extension).
 - `bun run dev` — rebuild on change.
 - `bun run typecheck` / `bun run lint` (`bun run lint:fix` to format and autofix).
+- `bun run test` — unit tests (`bun test`, only `src/**/*.test.ts`; see `bunfig.toml`).
 - `bun run test:e2e` — build, then Playwright in Chromium with the extension loaded. Add `-- --headed` to watch, `-- -g "name"` to filter.
-- `bun run check` — typecheck + lint + build + e2e. Must be green before you claim anything is done.
+- `bun run check` — typecheck + lint + unit tests + build + e2e. Must be green before you claim anything is done.
+- `bun run video-frames <video.webm>` — split a recorded e2e video into PNG frames next to it, to review motion.
 
 ## Layout
 
 - `src/manifest.json` — MV3 manifest. Every `*.json` under `src/` is copied to `dist/` as is.
 - `src/content/` — content script entry. `src/background/` — service worker entry.
-- `src/peek/` — the Peek feature.
-- `src/rules/` — declarativeNetRequest static rulesets (frame header stripping).
+- `src/peek/` — the Peek feature: pure domain (`peek-session.ts` state machine, `geometry.ts`, `spring.ts`,
+  `choreography.ts`, `motion-tokens.ts`), the controller shell, and the DOM view in `src/peek/overlay/`.
+- `src/messaging/` — typed messages between content scripts and the service worker.
+- `src/background/` — service worker: Peek message relay and `chrome.*` adapters (session DNR rules, tabs).
+- `src/**/*.test.ts` — unit tests for the pure modules.
 - `e2e/` — Playwright specs; `e2e/support/` helpers; `e2e/fixtures/` local server and test pages.
 - `artifacts/` — test output: videos, screenshots, traces, HTML report (gitignored).
 
