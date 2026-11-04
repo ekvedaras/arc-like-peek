@@ -3,6 +3,8 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.spec.ts",
+  /** Live websites run only on demand: `bun run test:real-sites`. */
+  testIgnore: "real-sites/**",
   outputDir: "artifacts/test-results",
   fullyParallel: true,
   forbidOnly: true,

@@ -43,7 +43,7 @@
       "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
     },
     {
-      "includes": ["playwright.config.ts"],
+      "includes": ["playwright*.config.ts"],
       "linter": { "rules": { "style": { "noDefaultExport": "off" } } }
     }
   ]
