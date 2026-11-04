@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Arc-like Peek",
+  "description": "Shift+click a link to peek at it in an overlay, like Arc's Peek.",
+  "version": "0.0.1",
+  "minimum_chrome_version": "120",
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/content-script.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "permissions": ["declarativeNetRequest"],
+  "host_permissions": ["<all_urls>"],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "frame-header-stripping",
+        "enabled": true,
+        "path": "rules/frame-header-stripping.json"
+      }
+    ]
+  }
+}

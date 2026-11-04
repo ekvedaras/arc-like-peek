@@ -1,0 +1,21 @@
+{
+  "name": "arc-like-peek",
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@playwright/test": "1.63.0",
+    "@types/bun": "latest",
+    "@types/chrome": "^0.3.7",
+    "typescript": "7.0.2"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "dev": "bun scripts/build.ts --watch",
+    "typecheck": "bun --bun tsc",
+    "lint": "bun --bun biome check .",
+    "lint:fix": "bun --bun biome check --write .",
+    "test:e2e": "bun run build && bun --bun playwright test",
+    "check": "bun run typecheck && bun run lint && bun run test:e2e"
+  }
+}
