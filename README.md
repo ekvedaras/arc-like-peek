@@ -36,7 +36,7 @@ Only `bun` is needed; always go through the package scripts.
 - `bun run check` runs all of the above; CI runs it.
 - `bun run test:real-sites` exercises live websites (needs network, not part of `check`).
 
-Project history, decisions and research live in [`wiki/`](wiki/index.md); see `CLAUDE.md` and `CODING_STANDARDS.md` for conventions.
+See `CLAUDE.md` and `CODING_STANDARDS.md` for conventions.
 
 ## Known limits
 
