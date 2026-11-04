@@ -209,6 +209,11 @@ test.describe("closing a peek", () => {
     fixtureServer,
   }) => {
     await page.goto(fixtureServer.url("/links.html"));
+    // Slowed tenfold, so Esc reliably lands while the pane is still growing however busy the machine.
+    // The tracer's clock is the page's animation timeline, so its duration is in slowed time too.
+    const devtools = await page.context().newCDPSession(page);
+    await devtools.send("Animation.enable");
+    await devtools.send("Animation.setPlaybackRate", { playbackRate: 0.1 });
 
     const pane = await traceAnimation(
       page,
@@ -218,7 +223,7 @@ test.describe("closing a peek", () => {
         await expectPeekPhase(page, "opening");
         await page.keyboard.press("Escape");
       },
-      { durationMs: 900 },
+      { durationMs: 700 },
     );
 
     const largest = Math.max(...presentSamples(pane).map((sample) => sample.scaleX));
