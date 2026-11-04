@@ -1,5 +1,6 @@
 import {
   cubicBezier,
+  durationMismatchMs,
   isMonotonic,
   linear,
   maxDeviationFromEasing,
@@ -15,14 +16,13 @@ test.describe("e2e harness self-checks", () => {
     await page.goto(fixtureServer.url("/animation.html"));
 
     const samples = await traceAnimation(page, "#box", () => page.locator("#show").click(), {
-      durationMs: 700,
+      durationMs: 500,
     });
 
     const opacity = measureTransition(samples, "opacity");
     expect(opacity.from).toBe(0);
     expect(opacity.to).toBe(1);
-    expect(opacity.durationMs).toBeGreaterThan(330);
-    expect(opacity.durationMs).toBeLessThan(470);
+    expect(durationMismatchMs(opacity, 400)).toBeLessThan(70);
     expect(isMonotonic(samples, "opacity")).toBe(true);
     expect(maxDeviationFromEasing(samples, "opacity", linear)).toBeLessThan(0.1);
     expect(maxDeviationFromEasing(samples, "scaleX", cubicBezier(0.2, 0.8, 0.2, 1))).toBeLessThan(

@@ -5,6 +5,7 @@ import { PEEK_MOTION } from "../src/peek/motion-tokens.ts";
 import {
   type AnimationSample,
   cubicBezier,
+  durationMismatchMs,
   isMonotonic,
   maxDeviationFromEasing,
   measureTransition,
@@ -22,6 +23,8 @@ import {
 } from "./support/peek-overlay.ts";
 
 const PIXEL_TOLERANCE = 2;
+/** A moment of the open spring where the pane is clearly still growing. */
+const MID_FLIGHT_MS = 120;
 
 async function openPeek(page: Page, linkSelector: string): Promise<void> {
   await shiftClick(page.locator(linkSelector));
@@ -66,7 +69,7 @@ test.describe("opening a peek", () => {
 
     const growth = measureTransition(pane, "scaleX");
     expect(growth.to).toBe(1);
-    expect(Math.abs(growth.durationMs - PEEK_OPEN_CURVE.duration)).toBeLessThan(80);
+    expect(durationMismatchMs(growth, PEEK_OPEN_CURVE.duration)).toBeLessThan(80);
     expect(maxDeviationFromEasing(pane, "scaleX", PEEK_OPEN_CURVE.progressAt, growth)).toBeLessThan(
       0.1,
     );
@@ -91,7 +94,7 @@ test.describe("opening a peek", () => {
     expect(fade.from).toBe(0);
     expect(fade.to).toBe(1);
     expect(isMonotonic(scrim, "opacity")).toBe(true);
-    expect(Math.abs(fade.durationMs - PEEK_MOTION.scrimFadeIn.duration)).toBeLessThan(80);
+    expect(durationMismatchMs(fade, PEEK_MOTION.scrimFadeIn.duration)).toBeLessThan(80);
     expect(
       maxDeviationFromEasing(scrim, "opacity", cubicBezier(...PEEK_MOTION.scrimFadeIn.easing)),
     ).toBeLessThan(0.1);
@@ -145,7 +148,7 @@ test.describe("opening a peek", () => {
 
     expect(presentSamples(pane).every((sample) => sample.scaleX === 1)).toBe(true);
     const fade = measureTransition(pane, "opacity");
-    expect(Math.abs(fade.durationMs - PEEK_MOTION.reducedMotionFade.duration)).toBeLessThan(80);
+    expect(durationMismatchMs(fade, PEEK_MOTION.reducedMotionFade.duration)).toBeLessThan(80);
   });
 });
 
@@ -209,23 +212,38 @@ test.describe("closing a peek", () => {
     fixtureServer,
   }) => {
     await page.goto(fixtureServer.url("/links.html"));
-    // Slowed tenfold, so Esc reliably lands while the pane is still growing however busy the machine.
-    // The tracer's clock is the page's animation timeline, so its duration is in slowed time too.
+    // Hold the opening mid-flight, so Esc lands there however long the machine takes to deliver it.
     const devtools = await page.context().newCDPSession(page);
     await devtools.send("Animation.enable");
-    await devtools.send("Animation.setPlaybackRate", { playbackRate: 0.1 });
+    await devtools.send("Animation.setPlaybackRate", { playbackRate: 0 });
+    await shiftClick(page.locator("#cross-site-link"));
+    await expect(peekOverlay(page).frame.locator("#peeked-heading")).toBeVisible();
+    await page.evaluate(
+      ({ host, midFlightMs }) => {
+        for (const animation of document.querySelector(host)?.shadowRoot?.getAnimations() ?? []) {
+          animation.pause();
+          animation.currentTime = midFlightMs;
+        }
+      },
+      { host: PEEK_SELECTORS.host, midFlightMs: MID_FLIGHT_MS },
+    );
+    await devtools.send("Animation.setPlaybackRate", { playbackRate: 1 });
+    await expectPeekPhase(page, "opening");
 
     const pane = await traceAnimation(
       page,
       PEEK_SELECTORS.pane,
-      async () => {
-        await shiftClick(page.locator("#cross-site-link"));
-        await expectPeekPhase(page, "opening");
-        await page.keyboard.press("Escape");
+      () => page.keyboard.press("Escape"),
+      {
+        durationMs: 600,
       },
-      { durationMs: 700 },
     );
 
+    const frames = presentSamples(pane);
+    const midFlightScale = frames[0]?.scaleX ?? 0;
+    expect(midFlightScale).toBeGreaterThan(0.3);
+    expect(midFlightScale).toBeLessThan(0.95);
+    expect(isMonotonic(pane, "scaleX")).toBe(true);
     const largest = Math.max(...presentSamples(pane).map((sample) => sample.scaleX));
     expect(largest).toBeLessThan(1);
     expect(pane.at(-1)?.isPresent).toBe(false);
@@ -463,6 +481,7 @@ test.describe("the page behind a peek", () => {
   }) => {
     await page.goto(fixtureServer.url("/links.html"));
     await openPeek(page, "#cross-site-link");
+    await expect(peekOverlay(page).frame.locator("#peeked-heading")).toBeVisible();
 
     const peekedFrame = page.frame({ url: fixtureServer.crossSiteUrl("/peeked.html") });
     if (!peekedFrame) throw new Error("The peeked page is not loaded");

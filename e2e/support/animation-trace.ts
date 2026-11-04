@@ -19,13 +19,17 @@ export type AnimationSample = {
 
 export type NumericSampleProperty = "opacity" | "scaleX" | "scaleY" | "translateX" | "translateY";
 
-type TraceRequest = { readonly selector: string; readonly durationMs: number };
+type TraceRequest = { readonly selector: string; readonly slot: string };
 
 const TRACE_SLOT = "__arcLikePeekAnimationTrace";
 
 /**
- * Samples the element every animation frame while `action` runs, so curves can be asserted numerically.
- * The selector pierces open shadow roots; the element may appear only after `action` starts.
+ * Samples the element every animation frame while `action` runs and for `durationMs` after it
+ * returns, so curves can be asserted numerically. The selector pierces open shadow roots; the
+ * element may appear only after `action` starts.
+ *
+ * Times are on the page's animation clock (the `requestAnimationFrame` timestamp, which is
+ * `document.timeline` time), so they stay meaningful when animations are slowed through CDP.
  */
 export async function traceAnimation(
   page: Page,
@@ -33,16 +37,21 @@ export async function traceAnimation(
   action: () => Promise<void>,
   { durationMs = 1_000 }: { durationMs?: number } = {},
 ): Promise<AnimationSample[]> {
-  await page.evaluate(startSamplingInPage, { selector, durationMs, slot: TRACE_SLOT });
-  await action();
+  await page.evaluate(startSamplingInPage, { selector, slot: TRACE_SLOT });
+  try {
+    await action();
+  } finally {
+    await page.evaluate(stopSamplingInPage, { slot: TRACE_SLOT, afterMs: durationMs });
+  }
   return page.evaluate(collectSamplesInPage, TRACE_SLOT);
 }
 
-function startSamplingInPage({
-  selector,
-  durationMs,
-  slot,
-}: TraceRequest & { slot: string }): void {
+type SamplingInPage = {
+  readonly samples: Promise<unknown[]>;
+  readonly stopAfter: (afterMs: number) => void;
+};
+
+function startSamplingInPage({ selector, slot }: TraceRequest): void {
   const findDeep = (root: Document | ShadowRoot): Element | null => {
     const direct = root.querySelector(selector);
     if (direct) return direct;
@@ -52,9 +61,11 @@ function startSamplingInPage({
     }
     return null;
   };
+  const animationClock = (): number => Number(document.timeline.currentTime ?? 0);
 
   const samples: unknown[] = [];
-  const startedAt = performance.now();
+  const startedAt = animationClock();
+  let stopAt = Number.POSITIVE_INFINITY;
   const finished = new Promise<unknown[]>((resolve) => {
     const sample = (now: number): void => {
       const element = findDeep(document);
@@ -89,24 +100,40 @@ function startSamplingInPage({
           rect: { x: 0, y: 0, width: 0, height: 0 },
         });
       }
-      if (elapsedMs < durationMs) requestAnimationFrame(sample);
+      if (now < stopAt) requestAnimationFrame(sample);
       else resolve(samples);
     };
     requestAnimationFrame(sample);
   });
-  Reflect.set(window, slot, finished);
+  const sampling: SamplingInPage = {
+    samples: finished,
+    stopAfter: (afterMs) => {
+      stopAt = animationClock() + afterMs;
+    },
+  };
+  Reflect.set(window, slot, sampling);
+}
+
+function stopSamplingInPage({ slot, afterMs }: { slot: string; afterMs: number }): void {
+  (Reflect.get(window, slot) as SamplingInPage).stopAfter(afterMs);
 }
 
 function collectSamplesInPage(slot: string): Promise<AnimationSample[]> {
-  return Reflect.get(window, slot) as Promise<AnimationSample[]>;
+  return (Reflect.get(window, slot) as SamplingInPage).samples as Promise<AnimationSample[]>;
 }
+
+/**
+ * When something happened, as far as the samples can tell: after `earliestMs` (the last sample
+ * before it) and by `latestMs` (the first sample after it). Under load the renderer can skip
+ * frames for hundreds of milliseconds, so a bracket can be wide; it is never a guess.
+ */
+export type MomentBracket = { readonly earliestMs: number; readonly latestMs: number };
 
 export type PropertyTransition = {
   readonly from: number;
   readonly to: number;
-  readonly startedAtMs: number;
-  readonly settledAtMs: number;
-  readonly durationMs: number;
+  readonly started: MomentBracket;
+  readonly settled: MomentBracket;
 };
 
 export function measureTransition(
@@ -121,13 +148,25 @@ export function measureTransition(
   const from = first[property];
   const to = last[property];
   const firstMovingIndex = present.findIndex((sample) => sample[property] !== from);
-  // A transition starts on the frame its style changes, where it still reports `from`: the last frame at rest.
-  const startedAtMs = (present[firstMovingIndex - 1] ?? first).elapsedMs;
-  const firstSettled = present.find(
+  if (firstMovingIndex < 0) throw new Error(`${property} never changed from ${from}`);
+  const firstSettledIndex = present.findIndex(
     (sample, index) => index >= firstMovingIndex && sample[property] === to,
   );
-  const settledAtMs = (firstSettled ?? last).elapsedMs;
-  return { from, to, startedAtMs, settledAtMs, durationMs: settledAtMs - startedAtMs };
+  const atIndex = (index: number): number => (present[index] ?? last).elapsedMs;
+  return {
+    from,
+    to,
+    // A transition starts on the frame its style changes, where it still reports `from`.
+    started: { earliestMs: atIndex(firstMovingIndex - 1), latestMs: atIndex(firstMovingIndex) },
+    settled: { earliestMs: atIndex(firstSettledIndex - 1), latestMs: atIndex(firstSettledIndex) },
+  };
+}
+
+/** How far `expectedMs` lies outside every duration the samples allow; 0 when consistent with them. */
+export function durationMismatchMs(transition: PropertyTransition, expectedMs: number): number {
+  const shortest = transition.settled.earliestMs - transition.started.latestMs;
+  const longest = transition.settled.latestMs - transition.started.earliestMs;
+  return Math.max(0, shortest - expectedMs, expectedMs - longest);
 }
 
 export function isMonotonic(
@@ -165,8 +204,9 @@ export function cubicBezier(x1: number, y1: number, x2: number, y2: number): Eas
 export const linear: Easing = (progress) => progress;
 
 /**
- * Largest gap between the observed normalized progress and `easing`, over the measured transition window.
- * 0 means a perfect match; frame timing jitter usually keeps real matches below ~0.05.
+ * Largest gap between the observed normalized progress and `easing`, for the start and end within
+ * their brackets that fit the samples best. 0 means a perfect match; frame timing jitter usually
+ * keeps real matches below ~0.05.
  */
 export function maxDeviationFromEasing(
   samples: readonly AnimationSample[],
@@ -174,20 +214,36 @@ export function maxDeviationFromEasing(
   easing: Easing,
   transition: PropertyTransition = measureTransition(samples, property),
 ): number {
-  const { from, to, startedAtMs, durationMs } = transition;
-  if (durationMs <= 0 || from === to) throw new Error(`No ${property} transition to compare`);
+  const { from, to, started, settled } = transition;
+  if (from === to) throw new Error(`No ${property} transition to compare`);
 
-  const window = samples.filter(
+  const moving = samples.filter(
     (sample) =>
       sample.isPresent &&
-      sample.elapsedMs >= startedAtMs &&
-      sample.elapsedMs <= startedAtMs + durationMs,
+      sample.elapsedMs >= started.earliestMs &&
+      sample.elapsedMs <= settled.latestMs,
   );
-  return Math.max(
-    ...window.map((sample) => {
-      const expected = easing((sample.elapsedMs - startedAtMs) / durationMs);
-      const observed = (sample[property] - from) / (to - from);
-      return Math.abs(observed - expected);
-    }),
+  const deviationFor = (startMs: number, endMs: number): number =>
+    Math.max(
+      ...moving.map((sample) => {
+        const progress = Math.min(1, Math.max(0, (sample.elapsedMs - startMs) / (endMs - startMs)));
+        const observed = (sample[property] - from) / (to - from);
+        return Math.abs(observed - easing(progress));
+      }),
+    );
+  let best = Number.POSITIVE_INFINITY;
+  for (const startMs of momentsWithin(started)) {
+    for (const endMs of momentsWithin(settled)) {
+      if (endMs > startMs) best = Math.min(best, deviationFor(startMs, endMs));
+    }
+  }
+  return best;
+}
+
+function momentsWithin({ earliestMs, latestMs }: MomentBracket): number[] {
+  const steps = 64;
+  return Array.from(
+    { length: steps + 1 },
+    (_, step) => earliestMs + ((latestMs - earliestMs) * step) / steps,
   );
 }
