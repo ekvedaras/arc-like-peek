@@ -68,9 +68,6 @@ export function installPeek(document: Document, ports: PeekHostPorts): void {
       case "peekHostNotice/keyCommand":
         performKeyCommand(controller.intents, notice.command);
         return;
-      case "peekHostNotice/framePainted":
-        controller.pagePainted();
-        return;
     }
   });
 }

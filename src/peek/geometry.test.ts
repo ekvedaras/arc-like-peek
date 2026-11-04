@@ -12,17 +12,17 @@ import {
 } from "./geometry.ts";
 
 describe("peek layout", () => {
-  test("centres a pane 82 % of the viewport wide, 8 px from top and bottom", () => {
+  test("centres a pane 85 % of the viewport wide, 8 px from top and bottom", () => {
     const { pane } = peekLayout({ width: 1280, height: 800 });
 
-    expect(pane.width).toBeCloseTo(1049.6);
-    expect(pane.x).toBeCloseTo((1280 - 1049.6) / 2);
+    expect(pane.width).toBeCloseTo(1088);
+    expect(pane.x).toBeCloseTo((1280 - 1088) / 2);
     expect(pane.y).toBe(8);
     expect(pane.height).toBe(784);
   });
 
-  test("caps the pane width on very wide viewports", () => {
-    expect(peekLayout({ width: 3000, height: 1200 }).pane.width).toBe(1400);
+  test("keeps the same share of very wide viewports, as Arc does", () => {
+    expect(peekLayout({ width: 2400, height: 1340 }).pane.width).toBeCloseTo(2040);
   });
 
   test("puts the controls in the right gutter, 14 px from the pane", () => {
@@ -39,7 +39,7 @@ describe("peek layout", () => {
     const { pane, controlsRail } = peekLayout({ width: 300, height: 600 });
 
     expect(controlsRail.position).toBe("insidePane");
-    expect(controlsRail.x + 32).toBeLessThanOrEqual(pane.x + pane.width);
+    expect(controlsRail.x + 34).toBeLessThanOrEqual(pane.x + pane.width);
   });
 });
 

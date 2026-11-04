@@ -24,7 +24,7 @@ import {
 
 const PIXEL_TOLERANCE = 2;
 /** A moment of the open spring where the pane is clearly still growing. */
-const MID_FLIGHT_MS = 120;
+const MID_FLIGHT_MS = 60;
 
 async function openPeek(page: Page, linkSelector: string): Promise<void> {
   await shiftClick(page.locator(linkSelector));
@@ -153,7 +153,7 @@ test.describe("opening a peek", () => {
 });
 
 test.describe("a peek of a page that is slow to show", () => {
-  test("the scrim answers at once, the pane waits briefly for the page, then flies without it", async ({
+  test("the pane flies at once without the page, as Arc's does, and the page fills in later", async ({
     page,
     fixtureServer,
   }) => {
@@ -163,18 +163,12 @@ test.describe("a peek of a page that is slow to show", () => {
       page,
       PEEK_SELECTORS.pane,
       () => shiftClick(page.locator("#cross-site-slow-link")),
-      { durationMs: PEEK_MOTION.firstPaintWait + 900 },
+      { durationMs: 900 },
     );
 
-    const mountedAfter = pane.findLast(
-      (sample, index) => !sample.isPresent && pane[index + 1]?.isPresent,
-    );
-    if (!mountedAfter) throw new Error("The pane was there before the click");
-    const fadeIn = measureTransition(pane, "opacity");
-    expect(fadeIn.started.latestMs - mountedAfter.elapsedMs).toBeGreaterThanOrEqual(
-      PEEK_MOTION.firstPaintWait,
-    );
-    expect(measureTransition(pane, "scaleX").to).toBe(1);
+    const growth = measureTransition(pane, "scaleX");
+    expect(growth.to).toBe(1);
+    expect(durationMismatchMs(growth, PEEK_OPEN_CURVE.duration)).toBeLessThan(80);
     await expectPeekPhase(page, "open");
     await expect(peekOverlay(page).frame.locator("#peeked-heading")).toHaveCount(0);
   });
@@ -245,7 +239,7 @@ test.describe("closing a peek", () => {
     await devtools.send("Animation.enable");
     await devtools.send("Animation.setPlaybackRate", { playbackRate: 0 });
     await shiftClick(page.locator("#cross-site-link"));
-    // The pane waits for the page to paint before it flies; park it only once it has set off.
+    // Park the flight only once every animation has set off, after the pane's departure delay.
     await expect
       .poll(() =>
         page.evaluate((host) => {
@@ -636,10 +630,8 @@ test.describe("appearance", () => {
     await openPeek(page, "#cross-site-link");
     await expect(peekOverlay(page).frame.locator("#peeked-heading")).toBeVisible();
 
-    await expect(peekOverlay(page).closeButton).toHaveCSS(
-      "background-color",
-      "rgba(44, 44, 48, 0.95)",
-    );
+    await expect(peekOverlay(page).closeButton).toHaveCSS("background-color", "rgb(12, 12, 14)");
+    await expect(peekOverlay(page).pane).toHaveCSS("background-color", "rgb(0, 0, 0)");
     await captureScreenshot(page, testInfo, "peek-open-dark");
   });
 

@@ -41,7 +41,7 @@ export const IDENTITY_TRANSFORM: BoxTransform = {
 };
 
 export function peekLayout(viewport: ViewportSize): PeekLayout {
-  const width = Math.min(viewport.width * PEEK_LAYOUT.paneWidthRatio, PEEK_LAYOUT.paneMaxWidth);
+  const width = viewport.width * PEEK_LAYOUT.paneWidthRatio;
   const height = Math.max(0, viewport.height - 2 * PEEK_LAYOUT.paneVerticalInset);
   const pane: Rect = {
     x: (viewport.width - width) / 2,

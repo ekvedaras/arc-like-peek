@@ -2,7 +2,9 @@ import { PEEK_LAYOUT, PEEK_SURFACE } from "../motion-tokens.ts";
 
 /**
  * Colours follow wiki/research/arc-peek.md §5 and §13: Arc tints the scrim with the Space colour; without
- * a theme we use the neutral grey-blue measured from Arc's default look, and a GUESS for dark mode.
+ * a theme we use the neutral grey-blue measured from Arc's default look, and a GUESS for the dark scrim.
+ * The shadow, the dark blank pane and the dark controls were measured from a recording of Arc
+ * (wiki/research/2026-11-04-arc-recording-measurements.md).
  */
 export const PEEK_OVERLAY_STYLES = `
 :host {
@@ -13,7 +15,7 @@ export const PEEK_OVERLAY_STYLES = `
 .peek-dialog {
   --peek-scrim-tint: 128 132 160;
   --peek-pane-background: #ffffff;
-  --peek-pane-shadow: 0 8px 32px rgb(0 0 0 / 0.18), 0 0 0 0.5px rgb(0 0 0 / 0.08);
+  --peek-pane-shadow: 0 0 10px rgb(0 0 0 / 0.3);
   --peek-control-background: rgb(253 253 255);
   --peek-control-background-hover: #ffffff;
   --peek-control-glyph: rgb(100 99 134);
@@ -43,10 +45,9 @@ export const PEEK_OVERLAY_STYLES = `
 @media (prefers-color-scheme: dark) {
   .peek-dialog {
     --peek-scrim-tint: 20 20 26;
-    --peek-pane-background: #1d1d21;
-    --peek-pane-shadow: 0 10px 40px rgb(0 0 0 / 0.45), 0 0 0 0.5px rgb(255 255 255 / 0.1);
-    --peek-control-background: rgb(44 44 48 / 0.95);
-    --peek-control-background-hover: rgb(58 58 64);
+    --peek-pane-background: #000000;
+    --peek-control-background: rgb(12 12 14);
+    --peek-control-background-hover: rgb(36 36 40);
     --peek-control-glyph: rgb(214 214 222);
     --peek-control-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.35);
     color-scheme: dark;

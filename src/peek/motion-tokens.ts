@@ -2,9 +2,9 @@ import type { Spring } from "./spring.ts";
 import { type DurationMs, ms, type PixelLength, px, type Ratio, ratio } from "./units.ts";
 
 /**
- * Every tunable number behind Peek's look and motion, in one place so they can be refitted against a
- * frame-by-frame recording of Arc. Values marked GUESS are not observed from Arc; see
- * wiki/research/arc-peek.md and wiki/decisions/2026-11-04-peek-implementation.md.
+ * Every tunable number behind Peek's look and motion, in one place. Values marked MEASURED were fitted
+ * to a 60 fps screen recording of Arc 1.171 (2026-11-04); see
+ * wiki/research/2026-11-04-arc-recording-measurements.md. Values marked GUESS are not observed from Arc.
  */
 
 export type CubicBezierEasing = readonly [x1: number, y1: number, x2: number, y2: number];
@@ -19,18 +19,17 @@ const EASE_OUT: CubicBezierEasing = [0.25, 0.1, 0.25, 1];
 const EASE_IN: CubicBezierEasing = [0.42, 0, 1, 1];
 
 export const PEEK_LAYOUT = {
-  /** Pane width as a share of the viewport (measured ≈82 %). */
-  paneWidthRatio: ratio(0.82),
-  /** GUESS: Arc's maximum pane width is unknown. */
-  paneMaxWidth: px(1400),
-  /** Gap above and below the pane (measured ≈8 pt). */
+  /** MEASURED: pane width as a share of the viewport (≈85 % in a ≈2375 pt window), with no maximum. */
+  paneWidthRatio: ratio(0.85),
+  /** Gap above and below the pane (≈8 pt; consistent with the recording, not directly visible in it). */
   paneVerticalInset: px(8),
-  controlDiameter: px(32),
-  /** Centre-to-centre distance between stacked controls (measured ≈42 pt). */
-  controlPitch: px(42),
-  /** Gap between the pane's right edge and the controls rail (measured ≈14 pt). */
+  /** MEASURED: 34 pt. */
+  controlDiameter: px(34),
+  /** MEASURED: centre-to-centre distance between stacked controls, 43 pt. */
+  controlPitch: px(43),
+  /** MEASURED: gap between the pane's right edge and the controls rail, 13.5–14 pt. */
   railGapFromPane: px(14),
-  /** Controls rail top, below the pane's top edge (measured ≈8 pt). */
+  /** Controls rail top, below the pane's top edge (≈8 pt, from Arc's help-center images). */
   railTopOffset: px(8),
   /** GUESS: when the right gutter is narrower than this margin plus the rail, the rail moves inside the pane. */
   railMinViewportMargin: px(8),
@@ -38,20 +37,20 @@ export const PEEK_LAYOUT = {
 } as const satisfies Record<string, PixelLength | Ratio>;
 
 export const PEEK_SURFACE = {
-  /** Measured ≈6–7 pt. */
+  /** Measured ≈5–8 pt in flight; the resting corners were outside the recording. */
   paneCornerRadius: px(7),
-  /** Scrim opacity over the page (measured ≈70 %). */
+  /** MEASURED: scrim opacity over the page, ≈0.6–0.75 (tinted with the Space colour in Arc). */
   scrimDim: ratio(0.7),
-  /** Arc's scrim shows no blur; kept as a token because most clones add one. */
+  /** MEASURED: Arc's scrim shows no blur; kept as a token because most clones add one. */
   scrimBlur: px(0),
 } as const satisfies Record<string, PixelLength | Ratio>;
 
 export const PEEK_MOTION = {
-  /** GUESS: Arc's presentation spring (response ≈0.38 s, ≈1 % overshoot). */
-  openSpring: { response: ms(380), dampingRatio: 0.85 } satisfies Spring,
-  /** GUESS: faster and critically damped, so closing never overshoots. */
-  closeSpring: { response: ms(220), dampingRatio: 1 } satisfies Spring,
-  /** GUESS: grow to fill the viewport before handing over to a real tab. */
+  /** MEASURED: the pane's horizontal edges fit this spring to ±1.3 pt (≈0.7 % overshoot, rests ≈360 ms). */
+  openSpring: { response: ms(242), dampingRatio: 0.865 } satisfies Spring,
+  /** MEASURED: critically damped; ≈99 % of the way back into the link after 200 ms. */
+  closeSpring: { response: ms(190), dampingRatio: 1 } satisfies Spring,
+  /** GUESS: the recording has no expand. Grow to fill the viewport before handing over to a real tab. */
   expandSpring: { response: ms(240), dampingRatio: 1 } satisfies Spring,
   /**
    * Clone decision: after expanding, the new tab loads in the background behind the expanded Peek and
@@ -62,23 +61,35 @@ export const PEEK_MOTION = {
   springSettleTolerance: 0.001,
 
   /**
-   * Clone decision: the scrim answers the click at once, but the pane waits for the peeked page's
-   * first contentful paint before it flies, so it flies with content as Arc's snapshot does, for
-   * at most this long; a page slower than that flies blank and fills in.
+   * MEASURED: Arc's pane sets off ≈20 ms after the scrim starts, and flies blank when the page has not
+   * painted yet; it does not wait for content.
    */
-  firstPaintWait: ms(250),
-  /** Hides the blank frame while the pane is still tiny. */
-  paneFadeIn: { duration: ms(130), delay: ms(0), easing: EASE_OUT } satisfies FadeTiming,
-  /** The pane fades over the last part of its flight back to the link. */
-  paneFadeOutOnDismiss: { duration: ms(110), delay: ms(0), easing: EASE_IN } satisfies FadeTiming,
+  paneDeparture: ms(20),
+  /** MEASURED: Arc's pane is opaque from its first frame; this only hides the first, link-sized frames. */
+  paneFadeIn: { duration: ms(30), delay: ms(0), easing: EASE_OUT } satisfies FadeTiming,
+  /** MEASURED: the pane, squashed into a line over the link, is gone ≈200 ms after Esc. */
+  paneFadeOutOnDismiss: { duration: ms(70), delay: ms(130), easing: EASE_IN } satisfies FadeTiming,
 
-  scrimFadeIn: { duration: ms(240), delay: ms(0), easing: EASE_OUT } satisfies FadeTiming,
-  scrimFadeOut: { duration: ms(260), delay: ms(0), easing: EASE_OUT } satisfies FadeTiming,
+  /** MEASURED: 57 % opaque within ≈15 ms, 99 % by 115 ms. */
+  scrimFadeIn: {
+    duration: ms(117),
+    delay: ms(0),
+    easing: [0, 0.34, 0, 0.81],
+  } satisfies FadeTiming,
+  /** MEASURED: starts with the pane's flight back, gone after ≈175 ms. */
+  scrimFadeOut: {
+    duration: ms(175),
+    delay: ms(0),
+    easing: [0.37, 0.68, 0.49, 0.92],
+  } satisfies FadeTiming,
 
-  /** GUESS: controls appear once the pane is most of the way there. */
-  controlsAppear: { duration: ms(200), delay: ms(150), easing: EASE_OUT } satisfies FadeTiming,
-  controlsAppearFromScale: ratio(0.8),
-  controlsDisappear: { duration: ms(100), delay: ms(0), easing: EASE_IN } satisfies FadeTiming,
+  /**
+   * MEASURED: the rail rides on the pane's top-right corner and shows ≈95 ms into the flight, as it
+   * comes out from behind the pane's edge; it is not scaled.
+   */
+  controlsAppear: { duration: ms(35), delay: ms(95), easing: EASE_OUT } satisfies FadeTiming,
+  /** MEASURED: the rail is gone within two frames of Esc. */
+  controlsDisappear: { duration: ms(30), delay: ms(0), easing: EASE_IN } satisfies FadeTiming,
 
   /** GUESS: when the link is gone or off-screen the pane shrinks in place and fades instead. */
   dismissInPlaceScale: ratio(0.95),

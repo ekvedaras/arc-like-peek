@@ -17,8 +17,6 @@ export type PeekControllerPorts = {
 
 export type PeekController = {
   readonly dispatch: (event: PeekEvent<PeekOrigin>) => void;
-  /** The peeked page has painted; only the view cares, the session does not change. */
-  readonly pagePainted: () => void;
   /** What the user can ask of the Peek from its controls or keyboard. */
   readonly intents: PeekOverlayIntents;
 };
@@ -94,5 +92,5 @@ export function createPeekController(ports: PeekControllerPorts): PeekController
     }
   };
 
-  return { dispatch, intents, pagePainted: () => overlay?.pagePainted() };
+  return { dispatch, intents };
 }

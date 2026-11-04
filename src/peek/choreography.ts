@@ -15,15 +15,8 @@ import { type DurationMs, ms } from "./units.ts";
 /** The animated parts of the overlay. Only `transform` and `opacity` are ever animated. */
 export type OverlayPart = "scrim" | "pane" | "page" | "controls";
 
-/**
- * When a step may start. The pane holds until the peeked page has painted (or the wait runs out),
- * so it does not fly as an empty card; see `PEEK_MOTION.firstPaintWait`.
- */
-export type MotionCue = "atOnce" | "oncePagePainted";
-
 export type MotionStep = {
   readonly part: OverlayPart;
-  readonly cue: MotionCue;
   /** Keyframes without a starting value continue from wherever the part currently is. */
   readonly keyframes: readonly Keyframe[];
   readonly timing: {
@@ -57,14 +50,16 @@ export function openChoreography(
   const from = transformOnto(pane, origin);
   return [
     fade("scrim", 0, 1, PEEK_MOTION.scrimFadeIn, "backwards"),
-    oncePagePainted(spring("pane", from, IDENTITY_TRANSFORM, OPEN_CURVE, "backwards")),
-    oncePagePainted(fade("pane", 0, 1, PEEK_MOTION.paneFadeIn, "backwards")),
-    oncePagePainted(controlsAppear()),
+    ...[
+      spring("pane", from, IDENTITY_TRANSFORM, OPEN_CURVE, "backwards"),
+      fade("pane", 0, 1, PEEK_MOTION.paneFadeIn, "backwards"),
+      ...controlsAppear(pane, origin),
+    ].map(afterPaneDeparture),
   ];
 }
 
 /**
- * The pane flies back into the link it came from and fades at the very end; without a visible
+ * The pane flies back into the link it came from and fades as it gets there; without a visible
  * link it shrinks in place. Starts from the current state, so it can interrupt opening.
  */
 export function dismissChoreography(
@@ -79,14 +74,10 @@ export function dismissChoreography(
     : scaleAboutCentre(pane, PEEK_MOTION.dismissInPlaceScale);
   const curve = CLOSE_CURVE;
   const fadeOut = PEEK_MOTION.paneFadeOutOnDismiss;
-  const fadeOutAtEnd: FadeTiming = {
-    ...fadeOut,
-    delay: ms(Math.max(0, curve.duration - fadeOut.duration)),
-  };
   return [
     fadeTo("scrim", 0, PEEK_MOTION.scrimFadeOut),
     springTo("pane", to, curve),
-    fadeTo("pane", 0, origin ? fadeOutAtEnd : { ...fadeOut, duration: curve.duration }),
+    fadeTo("pane", 0, origin ? fadeOut : { ...fadeOut, delay: ms(0), duration: curve.duration }),
     fadeTo("controls", 0, PEEK_MOTION.controlsDisappear),
   ];
 }
@@ -121,7 +112,6 @@ export function expandChoreography(
     fadeTo("scrim", 0, PEEK_MOTION.scrimFadeOut),
     {
       part: "pane",
-      cue: "atOnce",
       keyframes: moments.map(({ offset, pane: transform }) => ({
         offset,
         transform: cssTransform(transform),
@@ -130,7 +120,6 @@ export function expandChoreography(
     },
     {
       part: "page",
-      cue: "atOnce",
       keyframes: moments.map(({ offset, pane: transform }) => ({
         offset,
         transform: cssTransform(pinnedToViewport(pane, viewport, transform)),
@@ -140,7 +129,6 @@ export function expandChoreography(
     // A separate animation, so the transforms above stay on the compositor.
     {
       part: "pane",
-      cue: "atOnce",
       keyframes: [{ borderRadius: "0px" }],
       timing: { ...timing, easing: EXPAND_CURVE.cssEasing },
     },
@@ -152,8 +140,8 @@ function crossfadeIn(): readonly MotionStep[] {
   const timing = PEEK_MOTION.reducedMotionFade;
   return [
     fade("scrim", 0, 1, timing, "backwards"),
-    oncePagePainted(fade("pane", 0, 1, timing, "backwards")),
-    oncePagePainted(fade("controls", 0, 1, timing, "backwards")),
+    fade("pane", 0, 1, timing, "backwards"),
+    fade("controls", 0, 1, timing, "backwards"),
   ];
 }
 
@@ -162,27 +150,29 @@ function crossfadeOut(): readonly MotionStep[] {
   return [fadeTo("scrim", 0, timing), fadeTo("pane", 0, timing), fadeTo("controls", 0, timing)];
 }
 
-function oncePagePainted(step: MotionStep): MotionStep {
-  return { ...step, cue: "oncePagePainted" };
+/** Arc's pane sets off just after the scrim, blank if the page has not painted yet. */
+function afterPaneDeparture(step: MotionStep): MotionStep {
+  return {
+    ...step,
+    timing: { ...step.timing, delay: ms(step.timing.delay + PEEK_MOTION.paneDeparture) },
+  };
 }
 
-function controlsAppear(): MotionStep {
-  const timing = PEEK_MOTION.controlsAppear;
-  const fromScale = PEEK_MOTION.controlsAppearFromScale;
-  return {
-    part: "controls",
-    cue: "atOnce",
-    keyframes: [
-      { opacity: 0, transform: `scale(${fromScale})` },
-      { opacity: 1, transform: "scale(1)" },
-    ],
-    timing: {
-      duration: timing.duration,
-      delay: timing.delay,
-      easing: cssCubicBezier(timing.easing),
-      fill: "backwards",
-    },
+/**
+ * The rail rides on the pane's top-right corner, so it follows the pane's spring from the link's corner
+ * to its place, and shows only once the pane is most of the way there.
+ */
+function controlsAppear(pane: Rect, origin: Rect): readonly MotionStep[] {
+  const fromCorner = {
+    translateX: origin.x + origin.width - (pane.x + pane.width),
+    translateY: origin.y - pane.y,
+    scaleX: 1,
+    scaleY: 1,
   };
+  return [
+    spring("controls", fromCorner, IDENTITY_TRANSFORM, OPEN_CURVE, "backwards"),
+    fade("controls", 0, 1, PEEK_MOTION.controlsAppear, "backwards"),
+  ];
 }
 
 function spring(
@@ -194,7 +184,6 @@ function spring(
 ): MotionStep {
   return {
     part,
-    cue: "atOnce",
     keyframes: [{ transform: cssTransform(from) }, { transform: cssTransform(to) }],
     timing: { duration: curve.duration, delay: ms(0), easing: curve.cssEasing, fill },
   };
@@ -203,7 +192,6 @@ function spring(
 function springTo(part: OverlayPart, to: BoxTransform, curve: SpringCurve): MotionStep {
   return {
     part,
-    cue: "atOnce",
     keyframes: [{ transform: cssTransform(to) }],
     timing: { duration: curve.duration, delay: ms(0), easing: curve.cssEasing, fill: "forwards" },
   };
@@ -218,7 +206,6 @@ function fade(
 ): MotionStep {
   return {
     part,
-    cue: "atOnce",
     keyframes: [{ opacity: from }, { opacity: to }],
     timing: { ...timing, easing: cssCubicBezier(timing.easing), fill },
   };
@@ -227,7 +214,6 @@ function fade(
 function fadeTo(part: OverlayPart, to: number, timing: FadeTiming): MotionStep {
   return {
     part,
-    cue: "atOnce",
     keyframes: [{ opacity: to }],
     timing: { ...timing, easing: cssCubicBezier(timing.easing), fill: "forwards" },
   };

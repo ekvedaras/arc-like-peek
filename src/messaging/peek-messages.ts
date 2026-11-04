@@ -14,9 +14,7 @@ export type PeekFrameReport =
       readonly url: string;
       readonly historyChange: PeekHistoryChange;
     }
-  | { readonly type: "peekFrame/keyCommand"; readonly command: PeekKeyCommand }
-  /** The peeked page has shown its first content. */
-  | { readonly type: "peekFrame/painted" };
+  | { readonly type: "peekFrame/keyCommand"; readonly command: PeekKeyCommand };
 
 /** Relayed by the service worker from the peeked page to the page that shows the Peek. */
 export type PeekHostNotice =
@@ -25,8 +23,7 @@ export type PeekHostNotice =
       readonly url: string;
       readonly historyChange: PeekHistoryChange;
     }
-  | { readonly type: "peekHostNotice/keyCommand"; readonly command: PeekKeyCommand }
-  | { readonly type: "peekHostNotice/framePainted" };
+  | { readonly type: "peekHostNotice/keyCommand"; readonly command: PeekKeyCommand };
 
 export type PeekMessage = PeekHostRequest | PeekFrameReport;
 
@@ -41,7 +38,6 @@ export function parsePeekMessage(message: unknown): PeekMessage | null {
   switch (message["type"]) {
     case "peekHost/allowFraming":
     case "peekHost/revokeFraming":
-    case "peekFrame/painted":
       return { type: message["type"] };
     case "peekHost/openInTab": {
       const url = message["url"];
@@ -77,8 +73,6 @@ export function parsePeekHostNotice(message: unknown): PeekHostNotice | null {
       const command = parseKeyCommand(message["command"]);
       return command ? { type: message["type"], command } : null;
     }
-    case "peekHostNotice/framePainted":
-      return { type: message["type"] };
     default:
       return null;
   }
