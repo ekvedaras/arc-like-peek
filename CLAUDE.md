@@ -12,6 +12,7 @@ Only `bun` is installed (no node/npm). Always go through the package scripts.
 - `bun run typecheck` / `bun run lint` (`bun run lint:fix` to format and autofix).
 - `bun run test` — unit tests (`bun test`, only `src/**/*.test.ts`; see `bunfig.toml`).
 - `bun run test:e2e` — build, then Playwright in Chromium with the extension loaded. Add `-- --headed` to watch, `-- -g "name"` to filter.
+- `bun run test:real-sites` — the Peek on live websites (`e2e/real-sites/`, needs network, not part of `check`).
 - `bun run check` — typecheck + lint + unit tests + build + e2e. Must be green before you claim anything is done.
 - `bun run video-frames <video.webm>` — split a recorded e2e video into PNG frames next to it, to review motion.
 
@@ -21,6 +22,7 @@ Only `bun` is installed (no node/npm). Always go through the package scripts.
 - `src/content/` — content script entry. `src/background/` — service worker entry.
 - `src/peek/` — the Peek feature: pure domain (`peek-session.ts` state machine, `geometry.ts`, `spring.ts`,
   `choreography.ts`, `motion-tokens.ts`), the controller shell, and the DOM view in `src/peek/overlay/`.
+- `src/peek-window/` — the Peek window: extension page the overlay's frame shows, which frames the peeked page.
 - `src/messaging/` — typed messages between content scripts and the service worker.
 - `src/background/` — service worker: Peek message relay and `chrome.*` adapters (session DNR rules, tabs).
 - `src/**/*.test.ts` — unit tests for the pure modules.
