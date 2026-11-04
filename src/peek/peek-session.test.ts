@@ -25,6 +25,15 @@ function run(...events: PeekEvent<Origin>[]): PeekTransition<Origin> {
   return transition;
 }
 
+const UNTOUCHED_HISTORY = { kind: "entriesAdded", count: 0 } as const;
+
+function navigatedTo(
+  url: PeekableUrl,
+  historyChange: "entryAdded" | "entryReplaced" | "untracked" = "entryAdded",
+): PeekEvent<Origin> {
+  return { type: "peekNavigated", url, historyChange };
+}
+
 const requested: PeekEvent<Origin> = { type: "peekRequested", url: ARTICLE, origin: ORIGIN };
 const openSettled: PeekEvent<Origin> = { type: "openSettled" };
 const dismissed: PeekEvent<Origin> = { type: "dismissRequested", via: "escapeKey" };
@@ -34,7 +43,10 @@ describe("opening a peek", () => {
   test("presents the overlay, allows framing, then loads the page, in that order", () => {
     const { session, effects } = run(requested);
 
-    expect(session).toEqual({ phase: "opening", peek: { url: ARTICLE, origin: ORIGIN } });
+    expect(session).toEqual({
+      phase: "opening",
+      peek: { url: ARTICLE, origin: ORIGIN, historyTrail: UNTOUCHED_HISTORY },
+    });
     expect(effects).toEqual([
       { kind: "presentOverlay", origin: ORIGIN },
       { kind: "allowFraming" },
@@ -44,7 +56,10 @@ describe("opening a peek", () => {
 
   test("is open once the opening motion settles", () => {
     expect(run(requested, openSettled)).toEqual({
-      session: { phase: "open", peek: { url: ARTICLE, origin: ORIGIN } },
+      session: {
+        phase: "open",
+        peek: { url: ARTICLE, origin: ORIGIN, historyTrail: UNTOUCHED_HISTORY },
+      },
       effects: [],
     });
   });
@@ -53,7 +68,10 @@ describe("opening a peek", () => {
     const other: PeekEvent<Origin> = { type: "peekRequested", url: NEXT_ARTICLE, origin: ORIGIN };
     const { session, effects } = run(requested, openSettled, other);
 
-    expect(session).toEqual({ phase: "open", peek: { url: ARTICLE, origin: ORIGIN } });
+    expect(session).toEqual({
+      phase: "open",
+      peek: { url: ARTICLE, origin: ORIGIN, historyTrail: UNTOUCHED_HISTORY },
+    });
     expect(effects).toEqual([]);
   });
 });
@@ -108,18 +126,15 @@ describe("expanding a peek into a tab", () => {
   });
 
   test("once settled, opens the page the user navigated to, then cleans up", () => {
-    const { session, effects } = run(
-      requested,
-      openSettled,
-      { type: "peekNavigated", url: NEXT_ARTICLE },
-      expanded,
-      { type: "expandSettled" },
-    );
+    const { session, effects } = run(requested, openSettled, navigatedTo(NEXT_ARTICLE), expanded, {
+      type: "expandSettled",
+    });
 
     expect(session).toEqual(CLOSED_PEEK);
     expect(effects).toEqual([
       { kind: "openInTab", url: NEXT_ARTICLE },
       { kind: "removeOverlay" },
+      { kind: "rewindHistory", entries: 1 },
       { kind: "revokeFraming" },
     ]);
   });
@@ -134,20 +149,48 @@ describe("expanding a peek into a tab", () => {
 
 describe("navigation inside a peek", () => {
   test("tracks the page shown while opening and open", () => {
-    const navigated: PeekEvent<Origin> = { type: "peekNavigated", url: NEXT_ARTICLE };
-
-    expect(run(requested, navigated).session).toEqual({
+    expect(run(requested, navigatedTo(NEXT_ARTICLE, "entryReplaced")).session).toEqual({
       phase: "opening",
-      peek: { url: NEXT_ARTICLE, origin: ORIGIN },
+      peek: { url: NEXT_ARTICLE, origin: ORIGIN, historyTrail: UNTOUCHED_HISTORY },
     });
   });
 
   test("is ignored when no peek is shown", () => {
     const closed: PeekSession<Origin> = CLOSED_PEEK;
-    expect(advancePeek(closed, { type: "peekNavigated", url: NEXT_ARTICLE })).toEqual({
+    expect(advancePeek(closed, navigatedTo(NEXT_ARTICLE))).toEqual({
       session: CLOSED_PEEK,
       effects: [],
     });
+  });
+});
+
+describe("the tab history a peek leaves behind", () => {
+  const closedAfter = (...navigations: PeekEvent<Origin>[]) =>
+    run(requested, openSettled, ...navigations, dismissed, { type: "dismissSettled" }).effects;
+
+  test("each page visited inside the peek is stepped back over once the peek is gone", () => {
+    expect(closedAfter(navigatedTo(NEXT_ARTICLE), navigatedTo(ARTICLE))).toEqual([
+      { kind: "removeOverlay" },
+      { kind: "rewindHistory", entries: 2 },
+      { kind: "revokeFraming" },
+      { kind: "returnFocus", origin: ORIGIN },
+    ]);
+  });
+
+  test("pages that replace the current entry leave nothing to step back over", () => {
+    expect(closedAfter(navigatedTo(NEXT_ARTICLE, "entryReplaced"))).not.toContainEqual(
+      expect.objectContaining({ kind: "rewindHistory" }),
+    );
+  });
+
+  test("after going back or forward inside the peek, history is left alone so the page stays", () => {
+    const effects = closedAfter(
+      navigatedTo(NEXT_ARTICLE),
+      navigatedTo(ARTICLE, "untracked"),
+      navigatedTo(NEXT_ARTICLE),
+    );
+
+    expect(effects).not.toContainEqual(expect.objectContaining({ kind: "rewindHistory" }));
   });
 });
 

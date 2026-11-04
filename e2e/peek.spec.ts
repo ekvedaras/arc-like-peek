@@ -398,6 +398,60 @@ async function framedHeadingCount(page: Page, url: string): Promise<number> {
 }
 
 test.describe("the page behind a peek", () => {
+  test("Back still leaves the page after browsing inside a peek and closing it", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/long-page.html"));
+    await page.goto(fixtureServer.url("/links.html"));
+    await openPeek(page, "#cross-site-link");
+    await peekOverlay(page).frame.locator("#in-peek-link").click();
+    await expect(peekOverlay(page).frame.locator("#section-1")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expectNoPeek(page);
+    await page.goBack();
+
+    await expect(page).toHaveURL(fixtureServer.url("/long-page.html"));
+  });
+
+  test("Back still leaves the page after browsing inside a peek and expanding it", async ({
+    page,
+    context,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/long-page.html"));
+    await page.goto(fixtureServer.url("/links.html"));
+    await openPeek(page, "#cross-site-link");
+    await peekOverlay(page).frame.locator("#in-peek-link").click();
+    await expect(peekOverlay(page).frame.locator("#section-1")).toBeVisible();
+
+    const newTab = context.waitForEvent("page");
+    await peekOverlay(page).expandButton.click();
+    await newTab;
+    await expectNoPeek(page);
+    await page.goBack();
+
+    await expect(page).toHaveURL(fixtureServer.url("/long-page.html"));
+  });
+
+  test("Back stays on the page while the peek is open and goes back inside the peek", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/links.html"));
+    await openPeek(page, "#cross-site-link");
+    await peekOverlay(page).frame.locator("#in-peek-link").click();
+    await expect(peekOverlay(page).frame.locator("#section-1")).toBeVisible();
+
+    // The browser's Back button walks the tab's joint history, as history.back() does.
+    await page.evaluate(() => history.back());
+
+    await expect(peekOverlay(page).frame.locator("#peeked-heading")).toBeVisible();
+    await expect(page).toHaveURL(fixtureServer.url("/links.html"));
+    await page.keyboard.press("Escape");
+    await expectNoPeek(page);
+  });
   test("does not scroll while the peek is open, and scrolls again after", async ({
     page,
     fixtureServer,

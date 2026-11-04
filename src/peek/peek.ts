@@ -14,12 +14,14 @@ export type PeekHostPorts = {
 
 /** Lets the user shift+click any link on this page to peek at it. */
 export function installPeek(document: Document, ports: PeekHostPorts): void {
+  const view = document.defaultView;
   const controller = createPeekController({
     mountOverlay: (intents) =>
       mountPeekOverlay(document, intents, (url) =>
         peekWindowAddress(ports.extensionPageUrl(PEEK_WINDOW_PAGE), url),
       ),
     requestFromServiceWorker: ports.requestFromServiceWorker,
+    rewindTabHistory: (entries) => view?.history.go(-entries),
   });
 
   const peekTriggeredBy = (event: MouseEvent): { url: PeekableUrl; origin: PeekOrigin } | null => {
@@ -35,7 +37,6 @@ export function installPeek(document: Document, ports: PeekHostPorts): void {
   };
 
   // Capturing on the window runs before the page's own handlers, which might navigate or cancel.
-  const view = document.defaultView;
   view?.addEventListener(
     "mousedown",
     (event) => {
@@ -60,7 +61,8 @@ export function installPeek(document: Document, ports: PeekHostPorts): void {
     switch (notice.type) {
       case "peekHostNotice/frameNavigated": {
         const url = asPeekableUrl(notice.url);
-        if (url) controller.dispatch({ type: "peekNavigated", url });
+        if (url)
+          controller.dispatch({ type: "peekNavigated", url, historyChange: notice.historyChange });
         return;
       }
       case "peekHostNotice/keyCommand":

@@ -46,13 +46,20 @@ describe("relaying peek messages", () => {
     await relayPeekMessage(ports, { type: "peekFrame/keyCommand", command: "dismiss" }, PEEK_FRAME);
     await relayPeekMessage(
       ports,
-      { type: "peekFrame/navigated", url: "https://x.example/b" },
+      { type: "peekFrame/navigated", url: "https://x.example/b", historyChange: "entryAdded" },
       PEEK_FRAME,
     );
 
     expect(ports.notifyTopFrame.mock.calls).toEqual([
       [7, { type: "peekHostNotice/keyCommand", command: "dismiss" }],
-      [7, { type: "peekHostNotice/frameNavigated", url: "https://x.example/b" }],
+      [
+        7,
+        {
+          type: "peekHostNotice/frameNavigated",
+          url: "https://x.example/b",
+          historyChange: "entryAdded",
+        },
+      ],
     ]);
   });
 

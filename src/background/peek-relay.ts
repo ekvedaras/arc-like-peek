@@ -37,6 +37,7 @@ export async function relayPeekMessage(
         await ports.notifyTopFrame(sender.tabId, {
           type: "peekHostNotice/frameNavigated",
           url: message.url,
+          historyChange: message.historyChange,
         });
       }
       return;

@@ -11,6 +11,8 @@ import {
 export type PeekControllerPorts = {
   readonly mountOverlay: (intents: PeekOverlayIntents) => PeekOverlay;
   readonly requestFromServiceWorker: (request: PeekHostRequest) => Promise<void>;
+  /** Steps the tab's history back without leaving the page, over entries only the Peek used. */
+  readonly rewindTabHistory: (entries: number) => void;
 };
 
 export type PeekController = {
@@ -66,6 +68,9 @@ export function createPeekController(ports: PeekControllerPorts): PeekController
       case "removeOverlay":
         overlay?.remove();
         overlay = null;
+        return;
+      case "rewindHistory":
+        ports.rewindTabHistory(effect.entries);
         return;
       case "revokeFraming":
         await ports.requestFromServiceWorker({ type: "peekHost/revokeFraming" });

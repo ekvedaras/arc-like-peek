@@ -1,6 +1,7 @@
 import type { PeekFrameReport } from "../messaging/peek-messages.ts";
 import { isPeekLink } from "./links.ts";
 import { peekKeyCommand } from "./peek-keyboard.ts";
+import type { PeekHistoryChange } from "./peek-session.ts";
 import { asPeekableUrl, isPeekGesture } from "./peek-trigger.ts";
 import { framableUrl } from "./peek-window-address.ts";
 
@@ -17,9 +18,17 @@ export function installPeekedPage(window: Window, ports: PeekedPagePorts): void 
     ports.report(message).catch((error: unknown) => console.error("Peek report failed", error));
   };
 
-  report({ type: "peekFrame/navigated", url: window.location.href });
-  window.navigation?.addEventListener("currententrychange", () =>
-    report({ type: "peekFrame/navigated", url: window.location.href }),
+  report({
+    type: "peekFrame/navigated",
+    url: window.location.href,
+    historyChange: historyChangeOf(window.navigation?.activation?.navigationType),
+  });
+  window.navigation?.addEventListener("currententrychange", (event) =>
+    report({
+      type: "peekFrame/navigated",
+      url: window.location.href,
+      historyChange: historyChangeOf(event.navigationType),
+    }),
   );
 
   window.addEventListener(
@@ -63,4 +72,16 @@ export function installPeekedPage(window: Window, ports: PeekedPagePorts): void 
 
 function hasModifier(event: MouseEvent): boolean {
   return event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
+}
+
+function historyChangeOf(navigationType: NavigationType | null | undefined): PeekHistoryChange {
+  switch (navigationType) {
+    case "push":
+      return "entryAdded";
+    case "replace":
+    case "reload":
+      return "entryReplaced";
+    default:
+      return "untracked";
+  }
 }

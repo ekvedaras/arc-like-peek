@@ -18,14 +18,36 @@ export type PeekedPage<Origin> = {
   /** The page currently shown, which changes as the user navigates inside the Peek. */
   readonly url: PeekableUrl;
   readonly origin: Origin;
+  readonly historyTrail: PeekHistoryTrail;
 };
+
+/**
+ * How a navigation inside the Peek changed the tab's back/forward history. A frame shares its tab's
+ * history, so each page visited inside the Peek is an entry there. `untracked`: the user went back
+ * or forward, or the page could not tell.
+ */
+export type PeekHistoryChange = "entryAdded" | "entryReplaced" | "untracked";
+
+/**
+ * What the Peek has left in the tab's history. Its entries outlive the Peek, so Back on the page
+ * would seem to do nothing until they are rewound. Once untracked, rewinding could leave the page.
+ */
+export type PeekHistoryTrail =
+  | { readonly kind: "entriesAdded"; readonly count: number }
+  | { readonly kind: "untracked" };
+
+const NO_HISTORY_TRAIL: PeekHistoryTrail = { kind: "entriesAdded", count: 0 };
 
 export type DismissMechanism = "escapeKey" | "backdropClick" | "closeButton";
 
 export type PeekEvent<Origin> =
   | { readonly type: "peekRequested"; readonly url: PeekableUrl; readonly origin: Origin }
   | { readonly type: "openSettled" }
-  | { readonly type: "peekNavigated"; readonly url: PeekableUrl }
+  | {
+      readonly type: "peekNavigated";
+      readonly url: PeekableUrl;
+      readonly historyChange: PeekHistoryChange;
+    }
   | { readonly type: "dismissRequested"; readonly via: DismissMechanism }
   | { readonly type: "dismissSettled" }
   | { readonly type: "expandRequested" }
@@ -39,6 +61,7 @@ export type PeekEffect<Origin> =
   | { readonly kind: "expandOverlay" }
   | { readonly kind: "openInTab"; readonly url: PeekableUrl }
   | { readonly kind: "removeOverlay" }
+  | { readonly kind: "rewindHistory"; readonly entries: number }
   | { readonly kind: "revokeFraming" }
   | { readonly kind: "returnFocus"; readonly origin: Origin };
 
@@ -79,8 +102,13 @@ function advanceShownPeek<Origin>(
   switch (event.type) {
     case "openSettled":
       return { session: { phase: "open", peek }, effects: [] };
-    case "peekNavigated":
-      return { session: { ...session, peek: { ...peek, url: event.url } }, effects: [] };
+    case "peekNavigated": {
+      const historyTrail = followHistory(peek.historyTrail, event.historyChange);
+      return {
+        session: { ...session, peek: { ...peek, url: event.url, historyTrail } },
+        effects: [],
+      };
+    }
     case "dismissRequested":
       return {
         session: { phase: "closing", peek },
@@ -95,7 +123,7 @@ function advanceShownPeek<Origin>(
 
 function startPeek<Origin>(url: PeekableUrl, origin: Origin): PeekTransition<Origin> {
   return {
-    session: { phase: "opening", peek: { url, origin } },
+    session: { phase: "opening", peek: { url, origin, historyTrail: NO_HISTORY_TRAIL } },
     effects: [
       { kind: "presentOverlay", origin },
       { kind: "allowFraming" },
@@ -109,6 +137,7 @@ function finishDismiss<Origin>(peek: PeekedPage<Origin>): PeekTransition<Origin>
     session: CLOSED_PEEK,
     effects: [
       { kind: "removeOverlay" },
+      ...rewindHistory(peek.historyTrail),
       { kind: "revokeFraming" },
       { kind: "returnFocus", origin: peek.origin },
     ],
@@ -121,9 +150,24 @@ function finishExpand<Origin>(peek: PeekedPage<Origin>): PeekTransition<Origin> 
     effects: [
       { kind: "openInTab", url: peek.url },
       { kind: "removeOverlay" },
+      ...rewindHistory(peek.historyTrail),
       { kind: "revokeFraming" },
     ],
   };
+}
+
+function followHistory(trail: PeekHistoryTrail, change: PeekHistoryChange): PeekHistoryTrail {
+  if (trail.kind === "untracked" || change === "untracked") return { kind: "untracked" };
+  return change === "entryAdded" ? { kind: "entriesAdded", count: trail.count + 1 } : trail;
+}
+
+/** Once the Peek's frame is gone, stepping back over its entries is invisible and restores Back. */
+function rewindHistory(
+  trail: PeekHistoryTrail,
+): readonly Extract<PeekEffect<never>, { kind: "rewindHistory" }>[] {
+  return trail.kind === "entriesAdded" && trail.count > 0
+    ? [{ kind: "rewindHistory", entries: trail.count }]
+    : [];
 }
 
 function unchanged<Origin>(session: PeekSession<Origin>): PeekTransition<Origin> {

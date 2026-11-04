@@ -1,4 +1,5 @@
 import type { PeekKeyCommand } from "../peek/peek-keyboard.ts";
+import type { PeekHistoryChange } from "../peek/peek-session.ts";
 
 /** Sent by the page that shows a Peek (the tab's top frame) to the service worker. */
 export type PeekHostRequest =
@@ -8,12 +9,20 @@ export type PeekHostRequest =
 
 /** Sent by the peeked page (inside the Peek's frame) to the service worker. */
 export type PeekFrameReport =
-  | { readonly type: "peekFrame/navigated"; readonly url: string }
+  | {
+      readonly type: "peekFrame/navigated";
+      readonly url: string;
+      readonly historyChange: PeekHistoryChange;
+    }
   | { readonly type: "peekFrame/keyCommand"; readonly command: PeekKeyCommand };
 
 /** Relayed by the service worker from the peeked page to the page that shows the Peek. */
 export type PeekHostNotice =
-  | { readonly type: "peekHostNotice/frameNavigated"; readonly url: string }
+  | {
+      readonly type: "peekHostNotice/frameNavigated";
+      readonly url: string;
+      readonly historyChange: PeekHistoryChange;
+    }
   | { readonly type: "peekHostNotice/keyCommand"; readonly command: PeekKeyCommand };
 
 export type PeekMessage = PeekHostRequest | PeekFrameReport;
@@ -30,10 +39,16 @@ export function parsePeekMessage(message: unknown): PeekMessage | null {
     case "peekHost/allowFraming":
     case "peekHost/revokeFraming":
       return { type: message["type"] };
-    case "peekHost/openInTab":
-    case "peekFrame/navigated": {
+    case "peekHost/openInTab": {
       const url = message["url"];
       return typeof url === "string" ? { type: message["type"], url } : null;
+    }
+    case "peekFrame/navigated": {
+      const url = message["url"];
+      const historyChange = parseHistoryChange(message["historyChange"]);
+      return typeof url === "string" && historyChange
+        ? { type: message["type"], url, historyChange }
+        : null;
     }
     case "peekFrame/keyCommand": {
       const command = parseKeyCommand(message["command"]);
@@ -49,7 +64,10 @@ export function parsePeekHostNotice(message: unknown): PeekHostNotice | null {
   switch (message["type"]) {
     case "peekHostNotice/frameNavigated": {
       const url = message["url"];
-      return typeof url === "string" ? { type: message["type"], url } : null;
+      const historyChange = parseHistoryChange(message["historyChange"]);
+      return typeof url === "string" && historyChange
+        ? { type: message["type"], url, historyChange }
+        : null;
     }
     case "peekHostNotice/keyCommand": {
       const command = parseKeyCommand(message["command"]);
@@ -62,6 +80,12 @@ export function parsePeekHostNotice(message: unknown): PeekHostNotice | null {
 
 function parseKeyCommand(command: unknown): PeekKeyCommand | null {
   return command === "dismiss" || command === "expand" ? command : null;
+}
+
+function parseHistoryChange(change: unknown): PeekHistoryChange | null {
+  return change === "entryAdded" || change === "entryReplaced" || change === "untracked"
+    ? change
+    : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
