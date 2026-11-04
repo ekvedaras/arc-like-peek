@@ -41,6 +41,6 @@
       "use_dynamic_url": true
     }
   ],
-  "permissions": ["declarativeNetRequest"],
+  "permissions": ["declarativeNetRequest", "webNavigation"],
   "host_permissions": ["<all_urls>"]
 }

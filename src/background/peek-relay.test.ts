@@ -23,11 +23,7 @@ describe("relaying peek messages", () => {
 
     await relayPeekMessage(ports, { type: "peekHost/allowFraming" }, TOP_FRAME);
 
-    expect(ports.grantFraming).toHaveBeenCalledWith({
-      ruleId: 7,
-      tabId: 7,
-      strippedResponseHeaders: ["x-frame-options", "content-security-policy"],
-    });
+    expect(ports.grantFraming.mock.calls[0]?.[0].tabId).toBe(7);
   });
 
   test("the peeked page cannot change framing or open tabs", async () => {

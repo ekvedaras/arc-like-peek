@@ -554,9 +554,31 @@ test.describe("pages that resist being framed", () => {
     const rules = await extensionServiceWorker.evaluate(() =>
       chrome.declarativeNetRequest.getSessionRules(),
     );
-    expect(rules).toHaveLength(1);
-    expect(rules[0]?.condition).toMatchObject({ resourceTypes: ["sub_frame"] });
-    expect(rules[0]?.condition.tabIds).toHaveLength(1);
+    expect(rules.map((rule) => rule.condition)).toEqual([
+      { resourceTypes: ["sub_frame"], tabIds: [expect.any(Number)] },
+      {
+        resourceTypes: ["sub_frame"],
+        tabIds: [expect.any(Number)],
+        responseHeaders: [{ header: "content-security-policy", values: ["*frame-ancestors*"] }],
+      },
+    ]);
+    expect(rules.map((rule) => rule.action.responseHeaders?.[0]?.header)).toEqual([
+      "x-frame-options",
+      "content-security-policy",
+    ]);
+  });
+
+  test("a peeked page keeps its own CSP when the CSP does not restrict framing", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/links.html"));
+
+    await openPeek(page, "#cross-site-csp-guarded-link");
+
+    const peeked = peekOverlay(page).frame;
+    await expect(peeked.locator("#csp-guarded-heading")).toBeVisible();
+    await expect(peeked.locator("#csp-probe")).toHaveText("inline script blocked");
   });
 
   test("framing stays denied in other tabs and after the peek closes", async ({

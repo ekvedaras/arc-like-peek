@@ -63,4 +63,28 @@ test.describe("e2e harness self-checks", () => {
     expect(await observedClick).toEqual({ shiftKey: true, targetId: "same-page-nested-link" });
     await captureScreenshot(page, testInfo, "links-after-shift-click");
   });
+
+  test("storage of a site framed by another site is partitioned, like in Chrome", async ({
+    page,
+    context,
+    fixtureServer,
+    intranetApp,
+  }) => {
+    const tab = await context.newPage();
+    await tab.goto(intranetApp.accountUrl("local-storage"));
+    await tab.locator("#sign-in").click();
+    await expect(tab.locator("#session-state")).toHaveText("signed in");
+
+    await page.goto(fixtureServer.url("/links.html"));
+    await page.evaluate((src) => {
+      const frame = document.createElement("iframe");
+      frame.id = "framed-intranet";
+      frame.src = src;
+      document.body.append(frame);
+    }, intranetApp.accountUrl("local-storage"));
+
+    await expect(page.frameLocator("#framed-intranet").locator("#session-state")).toHaveText(
+      "signed out",
+    );
+  });
 });

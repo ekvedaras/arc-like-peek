@@ -53,9 +53,13 @@ export function onTabClosed(listener: (tabId: number) => void): void {
   chrome.tabs.onRemoved.addListener((tabId) => listener(tabId));
 }
 
-/** Fires when the tab's top-level page starts loading another document. */
+/**
+ * Fires when the tab's top-level page has been replaced by another document. Not tabs.onUpdated:
+ * it also reports `status: "loading"` with the tab's unchanged URL when a frame in the page
+ * navigates, such as a form posted inside the Peek (seen 2026-11-04, Chrome 153).
+ */
 export function onTopFrameNavigated(listener: (tabId: number) => void): void {
-  chrome.tabs.onUpdated.addListener((tabId, change) => {
-    if (change.status === "loading" && change.url !== undefined) listener(tabId);
+  chrome.webNavigation.onCommitted.addListener((details) => {
+    if (details.frameId === TOP_FRAME_ID) listener(details.tabId);
   });
 }
