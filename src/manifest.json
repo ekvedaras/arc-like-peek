@@ -4,6 +4,18 @@
   "description": "Shift+click a link to peek at it in an overlay, like Arc's Peek.",
   "version": "0.0.1",
   "minimum_chrome_version": "120",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
   "background": {
     "service_worker": "background/service-worker.js"
   },

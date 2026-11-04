@@ -1,6 +1,7 @@
 import { watch } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { renderIcons } from "./render-icons";
 
 const ROOT = join(import.meta.dir, "..");
 const SOURCE = join(ROOT, "src");
@@ -34,6 +35,9 @@ async function buildExtension(): Promise<boolean> {
 
   for await (const asset of STATIC_ASSETS.scan(SOURCE)) {
     await Bun.write(join(OUTPUT, asset), await Bun.file(join(SOURCE, asset)).bytes());
+  }
+  for (const [size, png] of await renderIcons()) {
+    await Bun.write(join(OUTPUT, "icons", `icon-${size}.png`), png);
   }
   return true;
 }
