@@ -15,7 +15,9 @@
     "typecheck": "bun --bun tsc",
     "lint": "bun --bun biome check .",
     "lint:fix": "bun --bun biome check --write .",
+    "test": "bun test",
+    "video-frames": "bun scripts/video-frames.ts",
     "test:e2e": "bun run build && bun --bun playwright test",
-    "check": "bun run typecheck && bun run lint && bun run test:e2e"
+    "check": "bun run typecheck && bun run lint && bun run test && bun run test:e2e"
   }
 }

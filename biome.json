@@ -24,6 +24,7 @@
       },
       "complexity": {
         "noExcessiveCognitiveComplexity": "error",
+        "useLiteralKeys": "off",
         "useSimplifiedLogicExpression": "error"
       },
       "correctness": {

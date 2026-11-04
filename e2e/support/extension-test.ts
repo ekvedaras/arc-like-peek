@@ -2,7 +2,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type BrowserContext, test as base, chromium, type Worker } from "@playwright/test";
-import { type FixtureServer, startFixtureServer } from "../fixtures/server.ts";
+import {
+  CROSS_SITE_HOST_RESOLVER_RULE,
+  type FixtureServer,
+  startFixtureServer,
+} from "../fixtures/server.ts";
 
 const EXTENSION_DIRECTORY = join(import.meta.dir, "..", "..", "dist");
 const VIEWPORT = { width: 1280, height: 800 };
@@ -37,6 +41,7 @@ export const test = base.extend<ExtensionFixtures, WorkerFixtures>({
       args: [
         `--disable-extensions-except=${EXTENSION_DIRECTORY}`,
         `--load-extension=${EXTENSION_DIRECTORY}`,
+        `--host-resolver-rules=${CROSS_SITE_HOST_RESOLVER_RULE}`,
       ],
     });
 
