@@ -6,12 +6,10 @@ test("content script is injected into pages", async ({ page, fixtureServer }) =>
   await expect(page.locator("html")).toHaveAttribute("data-arc-like-peek", "ready");
 });
 
-test("service worker runs with the frame header ruleset enabled", async ({
-  extensionServiceWorker,
-}) => {
-  const enabledRulesets = await extensionServiceWorker.evaluate(() =>
-    chrome.declarativeNetRequest.getEnabledRulesets(),
+test("no framing allowance is active until a peek opens", async ({ extensionServiceWorker }) => {
+  const sessionRules = await extensionServiceWorker.evaluate(() =>
+    chrome.declarativeNetRequest.getSessionRules(),
   );
 
-  expect(enabledRulesets).toContain("frame-header-stripping");
+  expect(sessionRules).toEqual([]);
 });

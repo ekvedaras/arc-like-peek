@@ -13,17 +13,15 @@
       "js": ["content/content-script.js"],
       "run_at": "document_start",
       "all_frames": false
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/peek-frame-script.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
     }
   ],
   "permissions": ["declarativeNetRequest"],
-  "host_permissions": ["<all_urls>"],
-  "declarative_net_request": {
-    "rule_resources": [
-      {
-        "id": "frame-header-stripping",
-        "enabled": true,
-        "path": "rules/frame-header-stripping.json"
-      }
-    ]
-  }
+  "host_permissions": ["<all_urls>"]
 }
