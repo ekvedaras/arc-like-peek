@@ -3,16 +3,22 @@ import { isPeekLink } from "./links.ts";
 import { mountPeekOverlay, type PeekOrigin, performKeyCommand } from "./overlay/peek-overlay.ts";
 import { createPeekController } from "./peek-controller.ts";
 import { asPeekableUrl, isPeekGesture, type PeekableUrl, peekableUrl } from "./peek-trigger.ts";
+import { PEEK_WINDOW_PAGE, peekWindowAddress } from "./peek-window-address.ts";
 
 export type PeekHostPorts = {
   readonly requestFromServiceWorker: (request: PeekHostRequest) => Promise<void>;
   readonly onNotice: (listener: (notice: PeekHostNotice) => void) => void;
+  /** The URL of one of this extension's own pages. */
+  readonly extensionPageUrl: (page: string) => string;
 };
 
 /** Lets the user shift+click any link on this page to peek at it. */
 export function installPeek(document: Document, ports: PeekHostPorts): void {
   const controller = createPeekController({
-    mountOverlay: (intents) => mountPeekOverlay(document, intents),
+    mountOverlay: (intents) =>
+      mountPeekOverlay(document, intents, (url) =>
+        peekWindowAddress(ports.extensionPageUrl(PEEK_WINDOW_PAGE), url),
+      ),
     requestFromServiceWorker: ports.requestFromServiceWorker,
   });
 

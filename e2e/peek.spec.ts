@@ -357,6 +357,18 @@ test.describe("pages that resist being framed", () => {
     await captureScreenshot(page, testInfo, "strict-host-peek");
   });
 
+  test("links inside the peek still navigate it on a page whose CSP restricts frames", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/strict-host.html"));
+    await openPeek(page, "#cross-site-link");
+
+    await peekOverlay(page).frame.locator("#in-peek-link").click();
+
+    await expect(peekOverlay(page).frame.locator("#section-1")).toBeVisible();
+  });
+
   test("a frame-busting script cannot navigate the page behind the peek", async ({
     page,
     fixtureServer,

@@ -1,4 +1,3 @@
-import { PEEK_FRAME_NAME } from "../../messaging/peek-messages.ts";
 import {
   dismissChoreography,
   expandChoreography,
@@ -12,6 +11,7 @@ import type { PeekLink } from "../links.ts";
 import { type PeekKeyCommand, peekKeyCommand } from "../peek-keyboard.ts";
 import type { DismissMechanism, PeekPhase } from "../peek-session.ts";
 import type { PeekableUrl } from "../peek-trigger.ts";
+import { PEEKED_PAGE_PERMISSIONS } from "../peeked-page-permissions.ts";
 import { type ControlIcon, createControlIcon } from "./control-icons.ts";
 import { PEEK_OVERLAY_STYLES } from "./peek-overlay-styles.ts";
 import { lockPageScroll, type ScrollLock } from "./scroll-lock.ts";
@@ -40,28 +40,14 @@ export type PeekOverlay = {
 
 const HOST_TAG = "arc-like-peek";
 
-/**
- * Sandboxing keeps the peeked page's frame-busting scripts from navigating the page behind it,
- * while every other capability a normal page needs stays available.
- */
-const PEEKED_PAGE_SANDBOX = [
-  "allow-downloads",
-  "allow-forms",
-  "allow-modals",
-  "allow-orientation-lock",
-  "allow-pointer-lock",
-  "allow-popups",
-  "allow-popups-to-escape-sandbox",
-  "allow-presentation",
-  "allow-same-origin",
-  "allow-scripts",
-  "allow-storage-access-by-user-activation",
-].join(" ");
+/** Where the Peek's frame goes to show a page: the Peek window, which hosts the page itself. */
+export type PeekWindowAddressing = (url: PeekableUrl) => string;
 
-const PEEKED_PAGE_PERMISSIONS =
-  "autoplay; clipboard-read; clipboard-write; encrypted-media; fullscreen; picture-in-picture";
-
-export function mountPeekOverlay(document: Document, intents: PeekOverlayIntents): PeekOverlay {
+export function mountPeekOverlay(
+  document: Document,
+  intents: PeekOverlayIntents,
+  peekWindowAddressFor: PeekWindowAddressing,
+): PeekOverlay {
   const parts = buildOverlay(document, intents);
   document.documentElement.append(parts.host);
 
@@ -132,7 +118,7 @@ export function mountPeekOverlay(document: Document, intents: PeekOverlayIntents
       return play(openChoreography(pane, originRect(origin), motionPreference()));
     },
     load: (url) => {
-      parts.page.src = url;
+      parts.page.src = peekWindowAddressFor(url);
     },
     dismiss: (origin) => {
       const pane = (layout ?? applyLayout()).pane;
@@ -188,9 +174,7 @@ function buildOverlay(document: Document, intents: PeekOverlayIntents): OverlayP
 
   const pane = element(document, "div", "peek-pane");
   const page = element(document, "iframe", "peek-page");
-  page.name = PEEK_FRAME_NAME;
   page.title = "Peek";
-  page.setAttribute("sandbox", PEEKED_PAGE_SANDBOX);
   page.allow = PEEKED_PAGE_PERMISSIONS;
   page.autofocus = true;
   pane.append(page);

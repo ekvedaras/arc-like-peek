@@ -22,6 +22,13 @@
       "match_about_blank": true
     }
   ],
+  "web_accessible_resources": [
+    {
+      "resources": ["peek-window/peek-window.html"],
+      "matches": ["<all_urls>"],
+      "use_dynamic_url": true
+    }
+  ],
   "permissions": ["declarativeNetRequest"],
   "host_permissions": ["<all_urls>"]
 }

@@ -18,3 +18,7 @@ export function onPeekHostNotice(listener: (notice: PeekHostNotice) => void): vo
     return false;
   });
 }
+
+export function extensionPageUrl(page: string): string {
+  return chrome.runtime.getURL(page);
+}

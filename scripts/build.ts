@@ -10,9 +10,10 @@ const ENTRYPOINTS = [
   join(SOURCE, "background/service-worker.ts"),
   join(SOURCE, "content/content-script.ts"),
   join(SOURCE, "content/peek-frame-script.ts"),
+  join(SOURCE, "peek-window/peek-window.ts"),
 ];
 
-const STATIC_ASSETS = new Bun.Glob("**/*.json");
+const STATIC_ASSETS = new Bun.Glob("**/*.{json,html,css}");
 
 async function buildExtension(): Promise<boolean> {
   await rm(OUTPUT, { recursive: true, force: true });

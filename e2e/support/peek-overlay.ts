@@ -6,7 +6,9 @@ export const PEEK_SELECTORS = {
   scrim: ".peek-scrim",
   pane: ".peek-pane",
   controls: ".peek-controls",
+  /** The Peek's frame. It shows the Peek window, an extension page that frames the peeked page. */
   frame: ".peek-page",
+  peekedPage: "iframe",
 } as const;
 
 export type PeekPhase = "opening" | "open" | "closing" | "expanding";
@@ -19,7 +21,7 @@ export function peekOverlay(page: Page) {
     controls: page.locator(PEEK_SELECTORS.controls),
     closeButton: page.locator('.peek-control[data-control="close"]'),
     expandButton: page.locator('.peek-control[data-control="expand"]'),
-    frame: page.frameLocator(PEEK_SELECTORS.frame),
+    frame: page.frameLocator(PEEK_SELECTORS.frame).frameLocator(PEEK_SELECTORS.peekedPage),
   };
 }
 
