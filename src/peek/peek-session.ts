@@ -55,14 +55,14 @@ export type PeekEvent<Origin> =
 
 export type PeekEffect<Origin> =
   | { readonly kind: "presentOverlay"; readonly origin: Origin }
-  | { readonly kind: "grantPeekAccess" }
+  | { readonly kind: "allowFraming" }
   | { readonly kind: "loadPage"; readonly url: PeekableUrl }
   | { readonly kind: "dismissOverlay"; readonly origin: Origin }
   | { readonly kind: "expandOverlay" }
   | { readonly kind: "openInTab"; readonly url: PeekableUrl }
   | { readonly kind: "removeOverlay" }
   | { readonly kind: "rewindHistory"; readonly entries: number }
-  | { readonly kind: "revokePeekAccess" }
+  | { readonly kind: "revokeFraming" }
   | { readonly kind: "returnFocus"; readonly origin: Origin };
 
 export type PeekTransition<Origin> = {
@@ -126,7 +126,7 @@ function startPeek<Origin>(url: PeekableUrl, origin: Origin): PeekTransition<Ori
     session: { phase: "opening", peek: { url, origin, historyTrail: NO_HISTORY_TRAIL } },
     effects: [
       { kind: "presentOverlay", origin },
-      { kind: "grantPeekAccess" },
+      { kind: "allowFraming" },
       { kind: "loadPage", url },
     ],
   };
@@ -138,7 +138,7 @@ function finishDismiss<Origin>(peek: PeekedPage<Origin>): PeekTransition<Origin>
     effects: [
       { kind: "removeOverlay" },
       ...rewindHistory(peek.historyTrail),
-      { kind: "revokePeekAccess" },
+      { kind: "revokeFraming" },
       { kind: "returnFocus", origin: peek.origin },
     ],
   };
@@ -151,7 +151,7 @@ function finishExpand<Origin>(peek: PeekedPage<Origin>): PeekTransition<Origin> 
       { kind: "openInTab", url: peek.url },
       { kind: "removeOverlay" },
       ...rewindHistory(peek.historyTrail),
-      { kind: "revokePeekAccess" },
+      { kind: "revokeFraming" },
     ],
   };
 }

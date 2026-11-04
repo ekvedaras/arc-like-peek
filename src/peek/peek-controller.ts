@@ -23,7 +23,7 @@ export type PeekController = {
 
 /**
  * The imperative shell around the pure Peek session: feeds it events, then carries out the effects
- * it asks for, one after another, so the Peek's access (framing, sign-in) is always granted before a page loads and revoked after.
+ * it asks for, one after another, so framing is always allowed before a page loads and revoked after.
  */
 export function createPeekController(ports: PeekControllerPorts): PeekController {
   let session: PeekSession<PeekOrigin> = CLOSED_PEEK;
@@ -49,8 +49,8 @@ export function createPeekController(ports: PeekControllerPorts): PeekController
         overlay.reflectPhase(session.phase);
         dispatchWhenSettled(overlay.present(effect.origin), { type: "openSettled" });
         return;
-      case "grantPeekAccess":
-        await ports.requestFromServiceWorker({ type: "peekHost/grantAccess" });
+      case "allowFraming":
+        await ports.requestFromServiceWorker({ type: "peekHost/allowFraming" });
         return;
       case "loadPage":
         overlay?.load(effect.url);
@@ -72,8 +72,8 @@ export function createPeekController(ports: PeekControllerPorts): PeekController
       case "rewindHistory":
         ports.rewindTabHistory(effect.entries);
         return;
-      case "revokePeekAccess":
-        await ports.requestFromServiceWorker({ type: "peekHost/revokeAccess" });
+      case "revokeFraming":
+        await ports.requestFromServiceWorker({ type: "peekHost/revokeFraming" });
         return;
       case "returnFocus":
         effect.origin.link.focus({ preventScroll: true, focusVisible: false });

@@ -3,8 +3,8 @@ import type { PeekHistoryChange } from "../peek/peek-session.ts";
 
 /** Sent by the page that shows a Peek (the tab's top frame) to the service worker. */
 export type PeekHostRequest =
-  | { readonly type: "peekHost/grantAccess" }
-  | { readonly type: "peekHost/revokeAccess" }
+  | { readonly type: "peekHost/allowFraming" }
+  | { readonly type: "peekHost/revokeFraming" }
   | { readonly type: "peekHost/openInTab"; readonly url: string };
 
 /** Sent by the peeked page (inside the Peek's frame) to the service worker. */
@@ -16,12 +16,6 @@ export type PeekFrameReport =
     }
   | { readonly type: "peekFrame/keyCommand"; readonly command: PeekKeyCommand };
 
-/**
- * Sent by the Peek window (the extension page that frames the peeked page) before it loads `url`,
- * so the service worker knows which frames belong to the Peek and can share the user's sign-in.
- */
-export type PeekWindowReport = { readonly type: "peekWindow/opened"; readonly url: string };
-
 /** Relayed by the service worker from the peeked page to the page that shows the Peek. */
 export type PeekHostNotice =
   | {
@@ -31,13 +25,7 @@ export type PeekHostNotice =
     }
   | { readonly type: "peekHostNotice/keyCommand"; readonly command: PeekKeyCommand };
 
-/** Sent by the service worker to the peeked page. */
-export type PeekedPageNotice = {
-  /** The page was requested before the sign-in that led to it was in place; load it again. */
-  readonly type: "peekedPageNotice/reload";
-};
-
-export type PeekMessage = PeekHostRequest | PeekFrameReport | PeekWindowReport;
+export type PeekMessage = PeekHostRequest | PeekFrameReport;
 
 /**
  * The name of the Peek's frame. A browsing context keeps its name across navigations, so the
@@ -48,11 +36,10 @@ export const PEEK_FRAME_NAME = "arc-like-peek-frame";
 export function parsePeekMessage(message: unknown): PeekMessage | null {
   if (!isRecord(message)) return null;
   switch (message["type"]) {
-    case "peekHost/grantAccess":
-    case "peekHost/revokeAccess":
+    case "peekHost/allowFraming":
+    case "peekHost/revokeFraming":
       return { type: message["type"] };
-    case "peekHost/openInTab":
-    case "peekWindow/opened": {
+    case "peekHost/openInTab": {
       const url = message["url"];
       return typeof url === "string" ? { type: message["type"], url } : null;
     }
@@ -89,12 +76,6 @@ export function parsePeekHostNotice(message: unknown): PeekHostNotice | null {
     default:
       return null;
   }
-}
-
-export function parsePeekedPageNotice(message: unknown): PeekedPageNotice | null {
-  return isRecord(message) && message["type"] === "peekedPageNotice/reload"
-    ? { type: message["type"] }
-    : null;
 }
 
 function parseKeyCommand(command: unknown): PeekKeyCommand | null {

@@ -6,7 +6,6 @@ An Arc-style Peek for Chrome: shift+click a link and the page opens in an animat
 
 - Springy open and close animation fitted to a frame-by-frame recording of Arc.
 - Shows sites that forbid framing (`X-Frame-Options`, `frame-ancestors`) while a Peek is open.
-- Stays signed in: cookie logins from your tabs carry into the Peek, and signing in or out inside it signs you in or out in your tabs too.
 - Navigate inside the Peek; Esc, a click outside or the close button dismisses it.
 - Expand the Peek into a regular tab.
 
@@ -43,6 +42,4 @@ See `AGENTS.md` and `CODING_STANDARDS.md` for conventions.
 
 - Some sites refuse to be framed at all (for example x.com, PayPal, Facebook) and do not render in a Peek.
 - Expanding opens a fresh tab, so the page reloads and in-Peek history is lost.
-- Logins kept in `localStorage`, `sessionStorage` or IndexedDB (rather than cookies) do not carry into the Peek: Chrome partitions that storage for framed sites. Expand the Peek into a tab.
-- Plain-http sites do not get your cookie login in the Peek (the copies lent to it must be `Secure`).
-- While a Peek is open, the tab's other frames can be framed despite `X-Frame-Options`, and a peeked page whose CSP restricts framing runs without its CSP.
+- Logins that depend on third-party cookies may not carry into the Peek.

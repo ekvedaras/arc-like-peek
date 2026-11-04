@@ -16,7 +16,7 @@ test("anything else is rejected", () => {
   expect(parsePeekMessage(null)).toBeNull();
   expect(parsePeekMessage({ type: "peekHost/openInTab" })).toBeNull();
   expect(parsePeekMessage({ type: "peekFrame/keyCommand", command: "reload" })).toBeNull();
-  expect(parsePeekHostNotice({ type: "peekHost/grantAccess" })).toBeNull();
+  expect(parsePeekHostNotice({ type: "peekHost/allowFraming" })).toBeNull();
   expect(parsePeekMessage({ type: "peekFrame/navigated", url: "https://a.example" })).toBeNull();
   expect(
     parsePeekHostNotice({

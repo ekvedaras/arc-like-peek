@@ -23,12 +23,8 @@ const STRICT_HOST_HEADERS = {
     "default-src 'self'; frame-src 'self'; style-src 'self'; script-src 'self'; require-trusted-types-for 'script'",
 };
 
-/** Guards against injected scripts without restricting who may frame the page. */
-const CSP_GUARDED_HEADERS = { "Content-Security-Policy": "script-src 'none'" };
-
 const HEADERS_BY_PATH: Record<string, Record<string, string>> = {
   "/framing-denied.html": FRAMING_DENIED_HEADERS,
-  "/csp-guarded.html": CSP_GUARDED_HEADERS,
   "/strict-host.html": STRICT_HOST_HEADERS,
 };
 
