@@ -7,9 +7,11 @@ import {
   type PeekEvent,
   type PeekSession,
 } from "./peek-session.ts";
+import type { PeekableUrl } from "./peek-trigger.ts";
 
 export type PeekControllerPorts = {
-  readonly mountOverlay: (intents: PeekOverlayIntents) => PeekOverlay;
+  /** Mounts the overlay for a Peek that will first show `url`. */
+  readonly mountOverlay: (intents: PeekOverlayIntents, url: PeekableUrl) => PeekOverlay;
   readonly requestFromServiceWorker: (request: PeekHostRequest) => Promise<void>;
   /** Steps the tab's history back without leaving the page, over entries only the Peek used. */
   readonly rewindTabHistory: (entries: number) => void;
@@ -45,7 +47,7 @@ export function createPeekController(ports: PeekControllerPorts): PeekController
   const perform = async (effect: PeekEffect<PeekOrigin>): Promise<void> => {
     switch (effect.kind) {
       case "presentOverlay":
-        overlay = ports.mountOverlay(intents);
+        overlay = ports.mountOverlay(intents, effect.url);
         overlay.reflectPhase(session.phase);
         dispatchWhenSettled(overlay.present(effect.origin), { type: "openSettled" });
         return;
@@ -54,6 +56,9 @@ export function createPeekController(ports: PeekControllerPorts): PeekController
         return;
       case "loadPage":
         overlay?.load(effect.url);
+        return;
+      case "loadPageInPeekWindow":
+        overlay?.loadInPeekWindow(effect.url);
         return;
       case "dismissOverlay":
         if (overlay)

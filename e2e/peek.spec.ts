@@ -124,7 +124,7 @@ test.describe("opening a peek", () => {
 
     await openPeek(page, "#nested-element-link strong");
 
-    await expect(peekOverlay(page).frame.locator("#section-1")).toBeVisible();
+    await expect(peekOverlay(page).sameSiteFrame.locator("#section-1")).toBeVisible();
   });
 
   test("a plain click still follows the link", async ({ page, fixtureServer }) => {
@@ -641,6 +641,18 @@ test.describe("pages that resist being framed", () => {
     await openPeek(page, "#frame-busting-link");
 
     await expect(peekOverlay(page).frame.locator("#frame-busting-heading")).toBeVisible();
+    await expect(page).toHaveURL(fixtureServer.url("/links.html"));
+  });
+
+  test("a frame-busting script on the page's own site cannot navigate the page behind either", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/links.html"));
+
+    await openPeek(page, "#same-origin-frame-busting-link");
+
+    await expect(peekOverlay(page).sameSiteFrame.locator("#frame-busting-heading")).toBeVisible();
     await expect(page).toHaveURL(fixtureServer.url("/links.html"));
   });
 });

@@ -4,6 +4,7 @@ import { peekKeyCommand } from "./peek-keyboard.ts";
 import type { PeekHistoryChange } from "./peek-session.ts";
 import { asPeekableUrl, isPeekGesture } from "./peek-trigger.ts";
 import { framableUrl } from "./peek-window-address.ts";
+import { staysOnPageSite } from "./peeked-page-framing.ts";
 
 export type PeekedPagePorts = {
   readonly report: (report: PeekFrameReport) => Promise<void>;
@@ -12,6 +13,7 @@ export type PeekedPagePorts = {
 /**
  * Runs inside the Peek's frame. Keys pressed there never reach the page showing the Peek, so Peek's
  * shortcuts are relayed; navigation is reported so "open as tab" opens the page the user is on.
+ * A page framed by the page behind hands navigations to other sites over to the Peek window.
  */
 export function installPeekedPage(window: Window, ports: PeekedPagePorts): void {
   const report = (message: PeekFrameReport): void => {
@@ -30,6 +32,17 @@ export function installPeekedPage(window: Window, ports: PeekedPagePorts): void 
       historyChange: historyChangeOf(event.navigationType),
     }),
   );
+
+  const pageBehindOrigin = originOfPageFramingThis(window);
+  if (pageBehindOrigin) {
+    window.navigation?.addEventListener("navigate", (event) => {
+      const destination = asPeekableUrl(event.destination.url);
+      if (!(destination && leavesForAnotherDocument(event))) return;
+      if (staysOnPageSite(pageBehindOrigin, destination)) return;
+      event.preventDefault();
+      report({ type: "peekFrame/leavingPageSite", url: destination });
+    });
+  }
 
   window.addEventListener(
     "keydown",
@@ -67,6 +80,29 @@ export function installPeekedPage(window: Window, ports: PeekedPagePorts): void 
       }
     },
     true,
+  );
+}
+
+/**
+ * The origin of the page behind the Peek when that page frames this one itself, or null when the
+ * Peek window does (then any navigation is allowed and nothing needs to be done).
+ */
+function originOfPageFramingThis(window: Window): string | null {
+  if (window.parent !== window.top) return null;
+  return window.location.ancestorOrigins[0] ?? null;
+}
+
+/**
+ * Navigations the Peek window can take over: a GET of another document the page itself started.
+ * Form posts go ahead in place, as a GET could not carry them.
+ */
+function leavesForAnotherDocument(event: NavigateEvent): boolean {
+  return (
+    event.cancelable &&
+    !event.hashChange &&
+    event.downloadRequest === null &&
+    event.formData === null &&
+    (event.navigationType === "push" || event.navigationType === "replace")
   );
 }
 

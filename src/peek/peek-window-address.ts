@@ -1,9 +1,9 @@
 import { asPeekableUrl, type PeekableUrl } from "./peek-trigger.ts";
 
 /**
- * The extension page the Peek's frame shows; it hosts the peeked page in a frame of its own. Its
- * own CSP, not the CSP of the page being peeked from, then governs every navigation inside the Peek.
- * See wiki/decisions/2026-11-04-peek-window.md.
+ * The extension page the Peek's frame shows for pages of other sites; it hosts the peeked page in a
+ * frame of its own. Its own CSP, not the CSP of the page being peeked from, then governs every
+ * navigation inside the Peek. See wiki/decisions/2026-11-04-peek-window.md.
  */
 export const PEEK_WINDOW_PAGE = "peek-window/peek-window.html";
 

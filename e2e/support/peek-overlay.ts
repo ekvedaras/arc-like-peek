@@ -7,7 +7,10 @@ export const PEEK_SELECTORS = {
   pane: ".peek-pane",
   controls: ".peek-controls",
   snapshot: ".peek-snapshot",
-  /** The Peek's frame. It shows the Peek window, an extension page that frames the peeked page. */
+  /**
+   * The Peek's frame. It shows a page of the page behind's own site itself, and any other page
+   * through the Peek window, an extension page that frames the peeked page.
+   */
   frame: ".peek-page",
   peekedPage: "iframe",
 } as const;
@@ -23,7 +26,10 @@ export function peekOverlay(page: Page) {
     snapshot: page.locator(PEEK_SELECTORS.snapshot),
     closeButton: page.locator('.peek-control[data-control="close"]'),
     expandButton: page.locator('.peek-control[data-control="expand"]'),
+    /** A peeked page of another site, framed by the Peek window. */
     frame: page.frameLocator(PEEK_SELECTORS.frame).frameLocator(PEEK_SELECTORS.peekedPage),
+    /** A peeked page of the page behind's own site, framed by that page. */
+    sameSiteFrame: page.frameLocator(PEEK_SELECTORS.frame),
   };
 }
 

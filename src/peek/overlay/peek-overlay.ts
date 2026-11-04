@@ -1,3 +1,4 @@
+import { PEEK_FRAME_NAME } from "../../messaging/peek-messages.ts";
 import {
   dismissChoreography,
   expandChoreography,
@@ -21,7 +22,8 @@ import { type PeekKeyCommand, peekKeyCommand } from "../peek-keyboard.ts";
 import type { DismissMechanism, PeekPhase } from "../peek-session.ts";
 import { type ColourScheme, peekTint } from "../peek-tint.ts";
 import type { PeekableUrl } from "../peek-trigger.ts";
-import { PEEKED_PAGE_PERMISSIONS } from "../peeked-page-permissions.ts";
+import type { PeekedPageFraming } from "../peeked-page-framing.ts";
+import { PEEKED_PAGE_PERMISSIONS, PEEKED_PAGE_SANDBOX } from "../peeked-page-permissions.ts";
 import { type ControlIcon, createControlIcon } from "./control-icons.ts";
 import { cssColourParser, pageColour } from "./page-colour.ts";
 import { PEEK_OVERLAY_STYLES } from "./peek-overlay-styles.ts";
@@ -43,6 +45,8 @@ export type PeekOverlayIntents = {
 export type PeekOverlay = {
   readonly present: (origin: PeekOrigin) => Promise<void>;
   readonly load: (url: PeekableUrl) => void;
+  /** Replaces the page shown with `url`, framed by the Peek window, without a new history entry. */
+  readonly loadInPeekWindow: (url: PeekableUrl) => void;
   readonly dismiss: (origin: PeekOrigin) => Promise<void>;
   readonly expand: () => Promise<void>;
   readonly remove: () => void;
@@ -52,15 +56,19 @@ export type PeekOverlay = {
 
 const HOST_TAG = "arc-like-peek";
 
-/** Where the Peek's frame goes to show a page: the Peek window, which hosts the page itself. */
-export type PeekWindowAddressing = (url: PeekableUrl) => string;
+export type PeekedPageFramer = {
+  /** Who frames the first page the Peek shows. */
+  readonly framing: PeekedPageFraming;
+  /** Where the Peek's frame goes to have the Peek window frame `url`. */
+  readonly peekWindowAddressFor: (url: PeekableUrl) => string;
+};
 
 export function mountPeekOverlay(
   document: Document,
   intents: PeekOverlayIntents,
-  peekWindowAddressFor: PeekWindowAddressing,
+  framer: PeekedPageFramer,
 ): PeekOverlay {
-  const parts = buildOverlay(document, intents);
+  const parts = buildOverlay(document, intents, framer.framing);
   document.documentElement.append(parts.host);
 
   let layout: PeekLayout | null = null;
@@ -174,7 +182,13 @@ export function mountPeekOverlay(
       return play(openChoreography(pane, originShape(origin), motionPreference()));
     },
     load: (url) => {
-      parts.page.src = peekWindowAddressFor(url);
+      parts.page.src = framer.framing === "framedByPage" ? url : framer.peekWindowAddressFor(url);
+    },
+    loadInPeekWindow: (url) => {
+      // Sandbox flags apply from the next navigation on; the Peek window must not be sandboxed.
+      parts.page.removeAttribute("sandbox");
+      parts.page.removeAttribute("name");
+      parts.page.contentWindow?.location.replace(framer.peekWindowAddressFor(url));
     },
     dismiss: (origin) => {
       const pane = (layout ?? applyLayout()).pane;
@@ -221,7 +235,11 @@ type OverlayParts = {
   readonly controls: HTMLDivElement;
 };
 
-function buildOverlay(document: Document, intents: PeekOverlayIntents): OverlayParts {
+function buildOverlay(
+  document: Document,
+  intents: PeekOverlayIntents,
+  framing: PeekedPageFraming,
+): OverlayParts {
   const host = document.createElement(HOST_TAG);
   const shadow = host.attachShadow({ mode: "open" });
   const styles = new CSSStyleSheet();
@@ -236,6 +254,11 @@ function buildOverlay(document: Document, intents: PeekOverlayIntents): OverlayP
 
   const pane = element(document, "div", "peek-pane");
   const page = element(document, "iframe", "peek-page");
+  if (framing === "framedByPage") {
+    // Chrome names a frame's browsing context once, when the frame is attached.
+    page.name = PEEK_FRAME_NAME;
+    page.setAttribute("sandbox", PEEKED_PAGE_SANDBOX);
+  }
   page.title = "Peek";
   page.allow = PEEKED_PAGE_PERMISSIONS;
   page.autofocus = true;

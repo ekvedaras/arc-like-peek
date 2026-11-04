@@ -48,7 +48,7 @@ describe("opening a peek", () => {
       peek: { url: ARTICLE, origin: ORIGIN, historyTrail: UNTOUCHED_HISTORY },
     });
     expect(effects).toEqual([
-      { kind: "presentOverlay", origin: ORIGIN },
+      { kind: "presentOverlay", origin: ORIGIN, url: ARTICLE },
       { kind: "allowFraming" },
       { kind: "loadPage", url: ARTICLE },
     ]);
@@ -161,6 +161,27 @@ describe("navigation inside a peek", () => {
       session: CLOSED_PEEK,
       effects: [],
     });
+  });
+
+  test("leaving the site of the page behind moves the peek's page into the Peek window", () => {
+    const elsewhere = peekable("https://elsewhere.example/page");
+
+    expect(run(requested, openSettled, { type: "peekLeavingPageSite", url: elsewhere })).toEqual({
+      session: {
+        phase: "open",
+        peek: { url: elsewhere, origin: ORIGIN, historyTrail: UNTOUCHED_HISTORY },
+      },
+      effects: [{ kind: "loadPageInPeekWindow", url: elsewhere }],
+    });
+  });
+
+  test("leaving the site is ignored once the peek is closing", () => {
+    const elsewhere = peekable("https://elsewhere.example/page");
+
+    expect(
+      run(requested, openSettled, dismissed, { type: "peekLeavingPageSite", url: elsewhere })
+        .effects,
+    ).toEqual([]);
   });
 });
 

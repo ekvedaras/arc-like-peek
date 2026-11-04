@@ -6,6 +6,7 @@ An Arc-style Peek for Chrome: shift+click a link and the page opens in an animat
 
 - Springy open and close animation fitted to a frame-by-frame recording of Arc.
 - Shows sites that forbid framing (`X-Frame-Options`, `frame-ancestors`) while a Peek is open.
+- Stays signed in on the site you peek from: a link to a page of the same site (your intranet app's own sidebar, say) is framed by the page itself, so it gets your cookies and storage as in a tab.
 - Navigate inside the Peek; Esc, a click outside or the close button dismisses it.
 - Expand the Peek into a regular tab.
 
@@ -42,4 +43,6 @@ See `AGENTS.md` and `CODING_STANDARDS.md` for conventions.
 
 - Some sites refuse to be framed at all (for example x.com, PayPal, Facebook) and do not render in a Peek.
 - Expanding opens a fresh tab, so the page reloads and in-Peek history is lost.
-- Logins that depend on third-party cookies may not carry into the Peek.
+- A Peek of another site is a cross-site frame: Chrome withholds its `SameSite` cookies (all cookies if third-party cookies are blocked) and partitions its storage, so it may show that site signed out. Expand the Peek into a tab.
+- Inside a Peek of the page's own site, leaving for another site reloads the Peek through an extension page, so Back inside the Peek cannot return across that step. A form posted to another site, or a redirect to one, can be blocked by the page's own CSP.
+- While a Peek is open, the tab's other frames can be framed despite `X-Frame-Options`, and a peeked page whose CSP restricts framing runs without its CSP.

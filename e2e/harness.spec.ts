@@ -87,4 +87,27 @@ test.describe("e2e harness self-checks", () => {
       "signed out",
     );
   });
+
+  test("a site framed by a page of its own keeps its first-party storage, like in Chrome", async ({
+    page,
+    context,
+    intranetApp,
+  }) => {
+    const tab = await context.newPage();
+    await tab.goto(intranetApp.accountUrl("local-storage"));
+    await tab.locator("#sign-in").click();
+    await expect(tab.locator("#session-state")).toHaveText("signed in");
+
+    await page.goto(intranetApp.dashboardUrl("local-storage"));
+    await page.evaluate((src) => {
+      const frame = document.createElement("iframe");
+      frame.id = "framed-intranet";
+      frame.src = src;
+      document.body.append(frame);
+    }, intranetApp.accountUrl("local-storage"));
+
+    await expect(page.frameLocator("#framed-intranet").locator("#session-state")).toHaveText(
+      "signed in",
+    );
+  });
 });

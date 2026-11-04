@@ -2,25 +2,11 @@ import { sendToServiceWorker } from "../content/extension-messaging-adapter.ts";
 import { PEEK_FRAME_NAME } from "../messaging/peek-messages.ts";
 import { peekKeyCommand } from "../peek/peek-keyboard.ts";
 import { framableUrl, peekedUrlFrom } from "../peek/peek-window-address.ts";
-import { PEEKED_PAGE_PERMISSIONS } from "../peek/peeked-page-permissions.ts";
+import { PEEKED_PAGE_PERMISSIONS, PEEKED_PAGE_SANDBOX } from "../peek/peeked-page-permissions.ts";
 
-/**
- * Sandboxing keeps the peeked page's frame-busting scripts from navigating the page behind it,
- * while every other capability a normal page needs stays available.
- */
-const PEEKED_PAGE_SANDBOX = [
-  "allow-downloads",
-  "allow-forms",
-  "allow-modals",
-  "allow-orientation-lock",
-  "allow-pointer-lock",
-  "allow-popups",
-  "allow-popups-to-escape-sandbox",
-  "allow-presentation",
-  "allow-same-origin",
-  "allow-scripts",
-  "allow-storage-access-by-user-activation",
-].join(" ");
+// A Peek that framed a page of the page behind's site keeps its frame's name when it moves here;
+// the name belongs to the frame below, so that only the peeked page answers to it.
+window.name = "";
 
 const url = peekedUrlFrom(window.location.href);
 if (url) {

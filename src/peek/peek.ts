@@ -4,6 +4,7 @@ import { mountPeekOverlay, type PeekOrigin, performKeyCommand } from "./overlay/
 import { createPeekController } from "./peek-controller.ts";
 import { asPeekableUrl, isPeekGesture, type PeekableUrl, peekableUrl } from "./peek-trigger.ts";
 import { PEEK_WINDOW_PAGE, peekWindowAddress } from "./peek-window-address.ts";
+import { peekedPageFraming } from "./peeked-page-framing.ts";
 
 export type PeekHostPorts = {
   readonly requestFromServiceWorker: (request: PeekHostRequest) => Promise<void>;
@@ -16,10 +17,12 @@ export type PeekHostPorts = {
 export function installPeek(document: Document, ports: PeekHostPorts): void {
   const view = document.defaultView;
   const controller = createPeekController({
-    mountOverlay: (intents) =>
-      mountPeekOverlay(document, intents, (url) =>
-        peekWindowAddress(ports.extensionPageUrl(PEEK_WINDOW_PAGE), url),
-      ),
+    mountOverlay: (intents, url) =>
+      mountPeekOverlay(document, intents, {
+        framing: peekedPageFraming(document.URL, url),
+        peekWindowAddressFor: (url) =>
+          peekWindowAddress(ports.extensionPageUrl(PEEK_WINDOW_PAGE), url),
+      }),
     requestFromServiceWorker: ports.requestFromServiceWorker,
     rewindTabHistory: (entries) => view?.history.go(-entries),
   });
@@ -68,6 +71,11 @@ export function installPeek(document: Document, ports: PeekHostPorts): void {
       case "peekHostNotice/keyCommand":
         performKeyCommand(controller.intents, notice.command);
         return;
+      case "peekHostNotice/frameLeavingPageSite": {
+        const url = asPeekableUrl(notice.url);
+        if (url) controller.dispatch({ type: "peekLeavingPageSite", url });
+        return;
+      }
     }
   });
 }

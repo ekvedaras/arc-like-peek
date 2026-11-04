@@ -14,7 +14,9 @@ export type PeekFrameReport =
       readonly url: string;
       readonly historyChange: PeekHistoryChange;
     }
-  | { readonly type: "peekFrame/keyCommand"; readonly command: PeekKeyCommand };
+  | { readonly type: "peekFrame/keyCommand"; readonly command: PeekKeyCommand }
+  /** The peeked page, framed by the page behind, was about to go to another site; it did not. */
+  | { readonly type: "peekFrame/leavingPageSite"; readonly url: string };
 
 /** Relayed by the service worker from the peeked page to the page that shows the Peek. */
 export type PeekHostNotice =
@@ -23,7 +25,8 @@ export type PeekHostNotice =
       readonly url: string;
       readonly historyChange: PeekHistoryChange;
     }
-  | { readonly type: "peekHostNotice/keyCommand"; readonly command: PeekKeyCommand };
+  | { readonly type: "peekHostNotice/keyCommand"; readonly command: PeekKeyCommand }
+  | { readonly type: "peekHostNotice/frameLeavingPageSite"; readonly url: string };
 
 export type PeekMessage = PeekHostRequest | PeekFrameReport;
 
@@ -39,7 +42,8 @@ export function parsePeekMessage(message: unknown): PeekMessage | null {
     case "peekHost/allowFraming":
     case "peekHost/revokeFraming":
       return { type: message["type"] };
-    case "peekHost/openInTab": {
+    case "peekHost/openInTab":
+    case "peekFrame/leavingPageSite": {
       const url = message["url"];
       return typeof url === "string" ? { type: message["type"], url } : null;
     }
@@ -72,6 +76,10 @@ export function parsePeekHostNotice(message: unknown): PeekHostNotice | null {
     case "peekHostNotice/keyCommand": {
       const command = parseKeyCommand(message["command"]);
       return command ? { type: message["type"], command } : null;
+    }
+    case "peekHostNotice/frameLeavingPageSite": {
+      const url = message["url"];
+      return typeof url === "string" ? { type: message["type"], url } : null;
     }
     default:
       return null;

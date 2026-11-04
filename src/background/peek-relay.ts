@@ -54,6 +54,14 @@ export async function relayPeekMessage(
         });
       }
       return;
+    case "peekFrame/leavingPageSite":
+      if (!fromTopFrame) {
+        await ports.notifyTopFrame(sender.tabId, {
+          type: "peekHostNotice/frameLeavingPageSite",
+          url: message.url,
+        });
+      }
+      return;
   }
 }
 

@@ -189,12 +189,21 @@ function withoutHash(url: string): string {
   return url.split("#")[0] ?? url;
 }
 
+/**
+ * Chrome warns about every frame sandboxed with both allow-scripts and allow-same-origin. A page of
+ * the page behind's own site is framed that way on purpose: it needs its origin for its sign-in, and
+ * the sandbox is there only to stop frame-busting (wiki/decisions/2026-11-04-same-site-peek.md).
+ */
+const EXPECTED_SANDBOX_WARNING =
+  "An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.";
+
 /** Console errors, warnings and uncaught exceptions that come from the extension's own scripts. */
 function collectExtensionProblems(context: BrowserContext): string[] {
   const problems: string[] = [];
   const fromExtension = (message: ConsoleMessage) =>
     message.location().url.startsWith("chrome-extension://");
   const onConsole = (message: ConsoleMessage) => {
+    if (message.text() === EXPECTED_SANDBOX_WARNING) return;
     if ((message.type() === "error" || message.type() === "warning") && fromExtension(message))
       problems.push(`${message.type()}: ${message.text()}`);
   };

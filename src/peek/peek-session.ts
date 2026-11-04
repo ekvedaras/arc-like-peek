@@ -48,15 +48,22 @@ export type PeekEvent<Origin> =
       readonly url: PeekableUrl;
       readonly historyChange: PeekHistoryChange;
     }
+  /**
+   * The peeked page, framed by the page behind because it is on that page's site, is going to
+   * another site, where the page behind's CSP could block it.
+   */
+  | { readonly type: "peekLeavingPageSite"; readonly url: PeekableUrl }
   | { readonly type: "dismissRequested"; readonly via: DismissMechanism }
   | { readonly type: "dismissSettled" }
   | { readonly type: "expandRequested" }
   | { readonly type: "expandSettled" };
 
 export type PeekEffect<Origin> =
-  | { readonly kind: "presentOverlay"; readonly origin: Origin }
+  | { readonly kind: "presentOverlay"; readonly origin: Origin; readonly url: PeekableUrl }
   | { readonly kind: "allowFraming" }
   | { readonly kind: "loadPage"; readonly url: PeekableUrl }
+  /** Shows `url` through the Peek window instead, in place of the page the Peek shows now. */
+  | { readonly kind: "loadPageInPeekWindow"; readonly url: PeekableUrl }
   | { readonly kind: "dismissOverlay"; readonly origin: Origin }
   | { readonly kind: "expandOverlay" }
   | { readonly kind: "openInTab"; readonly url: PeekableUrl }
@@ -109,6 +116,11 @@ function advanceShownPeek<Origin>(
         effects: [],
       };
     }
+    case "peekLeavingPageSite":
+      return {
+        session: { ...session, peek: { ...peek, url: event.url } },
+        effects: [{ kind: "loadPageInPeekWindow", url: event.url }],
+      };
     case "dismissRequested":
       return {
         session: { phase: "closing", peek },
@@ -125,7 +137,7 @@ function startPeek<Origin>(url: PeekableUrl, origin: Origin): PeekTransition<Ori
   return {
     session: { phase: "opening", peek: { url, origin, historyTrail: NO_HISTORY_TRAIL } },
     effects: [
-      { kind: "presentOverlay", origin },
+      { kind: "presentOverlay", origin, url },
       { kind: "allowFraming" },
       { kind: "loadPage", url },
     ],

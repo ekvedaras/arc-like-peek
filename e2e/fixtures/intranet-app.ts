@@ -8,45 +8,69 @@ import { join } from "node:path";
  * certificate. Each login kind keeps the session the way some real app does.
  */
 export const INTRANET_HOSTNAME = "intranet.test";
-export const INTRANET_HOST_RESOLVER_RULE = `MAP ${INTRANET_HOSTNAME} 127.0.0.1`;
+/** The company's single sign-on, on a site of its own, like "Sign in with <company>" pages. */
+export const IDENTITY_PROVIDER_HOSTNAME = "sso-provider.test";
+export const INTRANET_HOST_RESOLVER_RULE = `MAP ${INTRANET_HOSTNAME} 127.0.0.1, MAP ${IDENTITY_PROVIDER_HOSTNAME} 127.0.0.1`;
 
 export const INTRANET_LOGINS = [
   "lax-cookie",
   "strict-cookie",
   "none-cookie",
   "local-storage",
+  "single-sign-on",
 ] as const;
 export type IntranetLogin = (typeof INTRANET_LOGINS)[number];
+type CookieLogin = Exclude<IntranetLogin, "local-storage">;
 
-const SESSION_COOKIE_ATTRIBUTES: Record<Exclude<IntranetLogin, "local-storage">, string> = {
+const SESSION_COOKIE_ATTRIBUTES: Record<CookieLogin, string> = {
   "lax-cookie": "SameSite=Lax",
   "strict-cookie": "SameSite=Strict",
   "none-cookie": "SameSite=None",
+  "single-sign-on": "SameSite=Lax",
 };
+
+const IDENTITY_PROVIDER_COOKIE = "sso_provider_session";
+
+/** Like real intranets, the app only lets its own pages frame its pages. */
+const INTRANET_FRAME_POLICY = { "Content-Security-Policy": "frame-src 'self'" };
 
 const STORAGE_TOKEN_KEY = "intranet-token";
 const SIGNED_IN_USER = "alice";
 
 export type IntranetApp = {
   readonly origin: string;
+  readonly identityProviderOrigin: string;
   /** The page that says whether the visitor is signed in, and offers to sign in or out. */
   accountUrl(login: IntranetLogin): string;
+  /** A page of the app that links to its account page, as an app's navigation does. */
+  dashboardUrl(login: IntranetLogin): string;
   stop(): Promise<void>;
 };
 
 export async function startIntranetApp(): Promise<IntranetApp> {
-  const tls = await selfSignedCertificateFor(INTRANET_HOSTNAME);
+  const tls = await selfSignedCertificateFor([INTRANET_HOSTNAME, IDENTITY_PROVIDER_HOSTNAME]);
+  let origin = "";
+  let identityProviderOrigin = "";
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
     tls,
     fetch(request) {
       const url = new URL(request.url);
+      if (url.hostname === IDENTITY_PROVIDER_HOSTNAME) return identityProvider(request);
+      if (`${request.method} ${url.pathname}` === "GET /sso-callback") return signInFromSso(url);
       const login = loginKindOf(url.searchParams.get("login"));
       if (!login) return new Response("Unknown login kind", { status: 400 });
       switch (`${request.method} ${url.pathname}`) {
+        case "GET /dashboard":
+          return dashboardPage(login);
         case "GET /account":
-          return accountPage(login, request);
+          if (login === "single-sign-on" && !isSignedIn(login, request)) {
+            return redirectTo(
+              `${identityProviderOrigin}/authorize?return_to=${encodeURIComponent(`${origin}/sso-callback`)}`,
+            );
+          }
+          return accountPage(login, request, identityProviderOrigin);
         case "GET /api/session":
           return new Response(isSignedIn(login, request) ? "signed in" : "signed out", {
             headers: { "Content-Type": "text/plain" },
@@ -60,12 +84,75 @@ export async function startIntranetApp(): Promise<IntranetApp> {
       }
     },
   });
-  const origin = `https://${INTRANET_HOSTNAME}:${server.port}`;
+  origin = `https://${INTRANET_HOSTNAME}:${server.port}`;
+  identityProviderOrigin = `https://${IDENTITY_PROVIDER_HOSTNAME}:${server.port}`;
   return {
     origin,
+    identityProviderOrigin,
     accountUrl: (login) => new URL(`/account?login=${login}`, origin).toString(),
+    dashboardUrl: (login) => new URL(`/dashboard?login=${login}`, origin).toString(),
     stop: () => server.stop(true),
   };
+}
+
+/**
+ * Signs the visitor in to the apps that send them here and back to `return_to`, or asks them to
+ * sign in first. Its session is a first-party cookie of its own site.
+ */
+function identityProvider(request: Request): Response {
+  const url = new URL(request.url);
+  const returnTo = url.searchParams.get("return_to") ?? "";
+  const authorize = `/authorize?return_to=${encodeURIComponent(returnTo)}`;
+  switch (`${request.method} ${url.pathname}`) {
+    case "GET /authorize": {
+      const cookies = new Bun.CookieMap(request.headers.get("Cookie") ?? "");
+      if (cookies.get(IDENTITY_PROVIDER_COOKIE) === SIGNED_IN_USER) {
+        return redirectTo(`${returnTo}?user=${SIGNED_IN_USER}`);
+      }
+      return new Response(
+        page(`
+          <p id="session-state">signed out</p>
+          <p id="api-session-state">signed out</p>
+          <form method="post" action="/sign-in?return_to=${encodeURIComponent(returnTo)}">
+            <button id="sign-in">Sign in with SSO</button>
+          </form>
+        `),
+        { headers: { "Content-Type": "text/html" } },
+      );
+    }
+    case "GET /":
+      return new Response(page(`<p id="sso-provider-heading">Company SSO</p>`), {
+        headers: { "Content-Type": "text/html" },
+      });
+    case "POST /sign-in": {
+      const headers = new Headers([["Location", authorize]]);
+      headers.append(
+        "Set-Cookie",
+        `${IDENTITY_PROVIDER_COOKIE}=${SIGNED_IN_USER}; Path=/; Secure; HttpOnly; Max-Age=3600; SameSite=Lax`,
+      );
+      return new Response(null, { status: 303, headers });
+    }
+    default:
+      return new Response("Not found", { status: 404 });
+  }
+}
+
+function signInFromSso(url: URL): Response {
+  if (url.searchParams.get("user") !== SIGNED_IN_USER) {
+    return new Response("Not signed in by SSO", { status: 403 });
+  }
+  return changeSession("single-sign-on", "signIn");
+}
+
+function redirectTo(location: string): Response {
+  return new Response(null, { status: 302, headers: new Headers([["Location", location]]) });
+}
+
+function dashboardPage(login: IntranetLogin): Response {
+  return new Response(
+    page(`<nav><a id="account-link" href="/account?login=${login}">Account</a></nav>`),
+    { headers: { "Content-Type": "text/html", ...INTRANET_FRAME_POLICY } },
+  );
 }
 
 function loginKindOf(value: string | null): IntranetLogin | null {
@@ -73,7 +160,7 @@ function loginKindOf(value: string | null): IntranetLogin | null {
 }
 
 function sessionCookieName(login: IntranetLogin): string {
-  return `intranet_${login.replace("-", "_")}`;
+  return `intranet_${login.replaceAll("-", "_")}`;
 }
 
 function changeSession(login: IntranetLogin, change: "signIn" | "signOut"): Response {
@@ -90,9 +177,22 @@ function changeSession(login: IntranetLogin, change: "signIn" | "signOut"): Resp
   return new Response(null, { status: 303, headers });
 }
 
-function accountPage(login: IntranetLogin, request: Request): Response {
-  const html = login === "local-storage" ? storageAccountPage() : cookieAccountPage(login, request);
-  return new Response(html, { headers: { "Content-Type": "text/html" } });
+function accountPage(
+  login: IntranetLogin,
+  request: Request,
+  identityProviderOrigin: string,
+): Response {
+  const session =
+    login === "local-storage" ? storageAccountPage() : cookieAccountPage(login, request);
+  const links = `
+    <nav>
+      <a id="dashboard-link" href="/dashboard?login=${login}">Dashboard</a>
+      <a id="sso-provider-link" href="${identityProviderOrigin}/">Company SSO</a>
+    </nav>
+  `;
+  return new Response(page(session + links), {
+    headers: { "Content-Type": "text/html", ...INTRANET_FRAME_POLICY },
+  });
 }
 
 function isSignedIn(login: IntranetLogin, request: Request): boolean {
@@ -105,7 +205,7 @@ function isSignedIn(login: IntranetLogin, request: Request): boolean {
  * API call from the page sees it, like single-page apps that ask the server who is signed in.
  */
 function cookieAccountPage(login: IntranetLogin, request: Request): string {
-  return page(`
+  return `
     <p id="session-state">${isSignedIn(login, request) ? "signed in" : "signed out"}</p>
     <p id="api-session-state"></p>
     <script>
@@ -115,11 +215,11 @@ function cookieAccountPage(login: IntranetLogin, request: Request): string {
     </script>
     <form method="post" action="/sign-in?login=${login}"><button id="sign-in">Sign in</button></form>
     <form method="post" action="/sign-out?login=${login}"><button id="sign-out">Sign out</button></form>
-  `);
+  `;
 }
 
 function storageAccountPage(): string {
-  return page(`
+  return `
     <p id="session-state"></p>
     <p id="api-session-state"></p>
     <button id="sign-in" type="button">Sign in</button>
@@ -139,7 +239,7 @@ function storageAccountPage(): string {
         location.reload();
       };
     </script>
-  `);
+  `;
 }
 
 function page(body: string): string {
@@ -148,7 +248,7 @@ function page(body: string): string {
 
 /** Generated per run, so no private key is ever committed. */
 async function selfSignedCertificateFor(
-  hostname: string,
+  hostnames: readonly string[],
 ): Promise<{ readonly cert: string; readonly key: string }> {
   const directory = await mkdtemp(join(tmpdir(), "arc-like-peek-tls-"));
   try {
@@ -164,9 +264,9 @@ async function selfSignedCertificateFor(
       "-days",
       "2",
       "-subj",
-      `/CN=${hostname}`,
+      `/CN=${hostnames[0]}`,
       "-addext",
-      `subjectAltName=DNS:${hostname}`,
+      `subjectAltName=${hostnames.map((hostname) => `DNS:${hostname}`).join(",")}`,
       "-keyout",
       keyPath,
       "-out",
