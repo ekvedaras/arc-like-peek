@@ -164,6 +164,9 @@ export function mountPeekOverlay(
       applyTint();
       scrollLock = lockPageScroll(document);
       parts.dialog.showModal();
+      // The dialog's autofocus does not always land on the frame (it did not on Linux CI), and without
+      // focus in the frame the keyboard scrolls nothing and Esc goes to the page behind.
+      parts.page.focus();
       const { pane } = applyLayout();
       return play(openChoreography(pane, originShape(origin), motionPreference()));
     },
