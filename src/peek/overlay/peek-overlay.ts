@@ -147,6 +147,11 @@ export function mountPeekOverlay(
     event.preventDefault();
     intents.dismiss("escapeKey");
   };
+  // Committing the Peek window's document swaps the frame's process, which on Linux drops the frame's focus.
+  const focusPeekWindow = (): void => {
+    if (parts.host.shadowRoot?.activeElement !== parts.page) parts.page.focus();
+  };
+
   const onResize = (): void => {
     if (layout) applyLayout();
   };
@@ -164,9 +169,7 @@ export function mountPeekOverlay(
       applyTint();
       scrollLock = lockPageScroll(document);
       parts.dialog.showModal();
-      // The dialog's autofocus does not always land on the frame (it did not on Linux CI), and without
-      // focus in the frame the keyboard scrolls nothing and Esc goes to the page behind.
-      parts.page.focus();
+      parts.page.addEventListener("load", focusPeekWindow);
       const { pane } = applyLayout();
       return play(openChoreography(pane, originShape(origin), motionPreference()));
     },
@@ -189,6 +192,7 @@ export function mountPeekOverlay(
       for (const animation of running) animation.cancel();
       running = [];
       parts.dialog.removeEventListener("cancel", onCancel);
+      parts.page.removeEventListener("load", focusPeekWindow);
       document.removeEventListener("keydown", onKeyDown, true);
       view?.removeEventListener("resize", onResize);
       if (parts.dialog.open) parts.dialog.close();

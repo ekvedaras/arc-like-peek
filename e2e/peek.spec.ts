@@ -159,6 +159,10 @@ test.describe("Arc's finer motion", () => {
     fixtureServer,
   }) => {
     await page.goto(fixtureServer.url("/links.html"));
+    // Slowed so that a renderer with few frames per second still samples the part of the flight being compared.
+    const devtools = await page.context().newCDPSession(page);
+    await devtools.send("Animation.enable");
+    await devtools.send("Animation.setPlaybackRate", { playbackRate: 0.25 });
 
     const pane = await traceAnimation(
       page,

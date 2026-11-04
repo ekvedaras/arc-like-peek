@@ -33,9 +33,13 @@ if (url) {
   document.body.append(peekedPage);
 
   // The Peek focuses this window when it opens; keys belong to the page the user is peeking at.
-  const focusPeekedPage = () => peekedPage.focus();
+  const focusPeekedPage = () => {
+    peekedPage.contentWindow?.focus();
+  };
   focusPeekedPage();
   window.addEventListener("focus", focusPeekedPage);
+  // Committing the peeked page's document swaps the frame's process, which on Linux drops the frame's focus.
+  peekedPage.addEventListener("load", focusPeekedPage);
 
   // Until the peeked page has loaded, keys land here or in its blank placeholder document, where no
   // content script listens; Esc must close the Peek even while a slow page is still loading.
