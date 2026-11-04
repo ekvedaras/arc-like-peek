@@ -14,7 +14,6 @@ Only `bun` is installed (no node/npm). Always go through the package scripts.
 - `bun run test:e2e` — build, then Playwright in Chromium with the extension loaded. Add `-- --headed` to watch, `-- -g "name"` to filter.
 - `bun run test:real-sites` — the Peek on live websites (`e2e/real-sites/`, needs network, not part of `check`).
 - `bun run check` — typecheck + lint + unit tests + build + e2e. Must be green before you claim anything is done.
-- `bun run video-frames <video.webm>` — split a recorded e2e video into PNG frames next to it, to review motion.
 
 ## Layout
 

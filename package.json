@@ -16,7 +16,6 @@
     "lint": "bun --bun biome check .",
     "lint:fix": "bun --bun biome check --write .",
     "test": "bun test",
-    "video-frames": "bun scripts/video-frames.ts",
     "test:e2e": "bun run build && bun --bun playwright test",
     "check": "bun run typecheck && bun run lint && bun run test && bun run test:e2e",
     "test:real-sites": "bun run build && bun --bun playwright test -c playwright.real-sites.config.ts"
