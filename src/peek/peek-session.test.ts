@@ -40,7 +40,7 @@ const dismissed: PeekEvent<Origin> = { type: "dismissRequested", via: "escapeKey
 const expanded: PeekEvent<Origin> = { type: "expandRequested" };
 
 describe("opening a peek", () => {
-  test("presents the overlay, allows framing, then loads the page, in that order", () => {
+  test("presents the overlay, grants the peek its access, then loads the page, in that order", () => {
     const { session, effects } = run(requested);
 
     expect(session).toEqual({
@@ -49,7 +49,7 @@ describe("opening a peek", () => {
     });
     expect(effects).toEqual([
       { kind: "presentOverlay", origin: ORIGIN },
-      { kind: "allowFraming" },
+      { kind: "grantPeekAccess" },
       { kind: "loadPage", url: ARTICLE },
     ]);
   });
@@ -99,13 +99,13 @@ describe("dismissing a peek", () => {
     expect(run(requested, openSettled, dismissed, dismissed).effects).toEqual([]);
   });
 
-  test("once settled, removes the overlay, revokes framing and returns focus", () => {
+  test("once settled, removes the overlay, revokes the peek's access and returns focus", () => {
     const { session, effects } = run(requested, openSettled, dismissed, { type: "dismissSettled" });
 
     expect(session).toEqual(CLOSED_PEEK);
     expect(effects).toEqual([
       { kind: "removeOverlay" },
-      { kind: "revokeFraming" },
+      { kind: "revokePeekAccess" },
       { kind: "returnFocus", origin: ORIGIN },
     ]);
   });
@@ -135,7 +135,7 @@ describe("expanding a peek into a tab", () => {
       { kind: "openInTab", url: NEXT_ARTICLE },
       { kind: "removeOverlay" },
       { kind: "rewindHistory", entries: 1 },
-      { kind: "revokeFraming" },
+      { kind: "revokePeekAccess" },
     ]);
   });
 
@@ -172,7 +172,7 @@ describe("the tab history a peek leaves behind", () => {
     expect(closedAfter(navigatedTo(NEXT_ARTICLE), navigatedTo(ARTICLE))).toEqual([
       { kind: "removeOverlay" },
       { kind: "rewindHistory", entries: 2 },
-      { kind: "revokeFraming" },
+      { kind: "revokePeekAccess" },
       { kind: "returnFocus", origin: ORIGIN },
     ]);
   });

@@ -1,4 +1,4 @@
-import type { PeekFrameReport } from "../messaging/peek-messages.ts";
+import type { PeekedPageNotice, PeekFrameReport } from "../messaging/peek-messages.ts";
 import { isPeekLink } from "./links.ts";
 import { peekKeyCommand } from "./peek-keyboard.ts";
 import type { PeekHistoryChange } from "./peek-session.ts";
@@ -7,6 +7,7 @@ import { framableUrl } from "./peek-window-address.ts";
 
 export type PeekedPagePorts = {
   readonly report: (report: PeekFrameReport) => Promise<void>;
+  readonly onNotice: (listener: (notice: PeekedPageNotice) => void) => void;
 };
 
 /**
@@ -17,6 +18,14 @@ export function installPeekedPage(window: Window, ports: PeekedPagePorts): void 
   const report = (message: PeekFrameReport): void => {
     ports.report(message).catch((error: unknown) => console.error("Peek report failed", error));
   };
+
+  ports.onNotice((notice) => {
+    switch (notice.type) {
+      case "peekedPageNotice/reload":
+        window.location.reload();
+        return;
+    }
+  });
 
   report({
     type: "peekFrame/navigated",

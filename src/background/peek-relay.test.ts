@@ -6,34 +6,41 @@ function fakePorts() {
   return {
     grantFraming: mock<PeekRelayPorts["grantFraming"]>(async () => {}),
     withdrawFraming: mock<PeekRelayPorts["withdrawFraming"]>(async () => {}),
+    peekOpening: mock<PeekRelayPorts["peekOpening"]>(async () => {}),
+    peekWindowOpened: mock<PeekRelayPorts["peekWindowOpened"]>(async () => {}),
+    peekClosed: mock<PeekRelayPorts["peekClosed"]>(async () => {}),
     openBackgroundTabNextTo: mock<PeekRelayPorts["openBackgroundTabNextTo"]>(async () => 42),
     tabFinishedLoading: mock<PeekRelayPorts["tabFinishedLoading"]>(async () => {}),
     switchToTab: mock<PeekRelayPorts["switchToTab"]>(async () => {}),
     elapse: mock<PeekRelayPorts["elapse"]>(() => new Promise(() => {})),
     notifyTopFrame: mock<PeekRelayPorts["notifyTopFrame"]>(async () => {}),
+    peekedPageLoaded: mock<PeekRelayPorts["peekedPageLoaded"]>(async () => false),
+    reloadPeekedPage: mock<PeekRelayPorts["reloadPeekedPage"]>(async () => {}),
   } satisfies PeekRelayPorts;
 }
 
-const TOP_FRAME = { tabId: 7, frameId: 0 };
-const PEEK_FRAME = { tabId: 7, frameId: 3 };
+const TOP_FRAME = { tabId: 7, frameId: 0, isExtensionPage: false };
+const PEEK_WINDOW = { tabId: 7, frameId: 2, isExtensionPage: true };
+const PEEK_FRAME = { tabId: 7, frameId: 3, isExtensionPage: false };
 
 describe("relaying peek messages", () => {
-  test("framing is allowed for sub-frames of the asking tab only", async () => {
+  test("the page showing a peek grants and revokes framing and sign-in sharing for its tab", async () => {
     const ports = fakePorts();
 
-    await relayPeekMessage(ports, { type: "peekHost/allowFraming" }, TOP_FRAME);
+    await relayPeekMessage(ports, { type: "peekHost/grantAccess" }, TOP_FRAME);
+    await relayPeekMessage(ports, { type: "peekHost/revokeAccess" }, TOP_FRAME);
 
-    expect(ports.grantFraming).toHaveBeenCalledWith({
-      ruleId: 7,
-      tabId: 7,
-      strippedResponseHeaders: ["x-frame-options", "content-security-policy"],
-    });
+    expect(ports.grantFraming.mock.calls[0]?.[0].tabId).toBe(7);
+    expect(ports.peekOpening).toHaveBeenCalledWith(7);
+    expect(ports.withdrawFraming.mock.calls[0]?.[0].tabId).toBe(7);
+    expect(ports.peekClosed).toHaveBeenCalledWith(7);
   });
 
-  test("the peeked page cannot change framing or open tabs", async () => {
+  test("the peeked page cannot change the peek's access or open tabs", async () => {
     const ports = fakePorts();
 
-    await relayPeekMessage(ports, { type: "peekHost/allowFraming" }, PEEK_FRAME);
+    await relayPeekMessage(ports, { type: "peekHost/grantAccess" }, PEEK_FRAME);
+    await relayPeekMessage(ports, { type: "peekHost/revokeAccess" }, PEEK_FRAME);
     await relayPeekMessage(
       ports,
       { type: "peekHost/openInTab", url: "https://x.example" },
@@ -41,7 +48,19 @@ describe("relaying peek messages", () => {
     );
 
     expect(ports.grantFraming).not.toHaveBeenCalled();
+    expect(ports.peekClosed).not.toHaveBeenCalled();
     expect(ports.openBackgroundTabNextTo).not.toHaveBeenCalled();
+  });
+
+  test("only the extension's peek window can introduce the peek's frames", async () => {
+    const ports = fakePorts();
+    const opened = { type: "peekWindow/opened", url: "https://x.example/a" } as const;
+
+    await relayPeekMessage(ports, opened, PEEK_FRAME);
+    await relayPeekMessage(ports, opened, TOP_FRAME);
+    await relayPeekMessage(ports, opened, PEEK_WINDOW);
+
+    expect(ports.peekWindowOpened.mock.calls).toEqual([[7, 2, new URL("https://x.example/a")]]);
   });
 
   test("reports from the peeked page reach the page that shows it", async () => {

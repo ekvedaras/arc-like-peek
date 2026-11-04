@@ -10,7 +10,9 @@ export function onPeekMessage(
     const tabId = sender.tab?.id;
     if (!message || tabId === undefined || sender.frameId === undefined) return false;
 
-    handle(message, { tabId, frameId: sender.frameId }).then(
+    const isExtensionPage =
+      sender.id === chrome.runtime.id && sender.url?.startsWith("chrome-extension://") === true;
+    handle(message, { tabId, frameId: sender.frameId, isExtensionPage }).then(
       () => reply({ ok: true }),
       (error: unknown) => {
         console.error("Peek message failed", message, error);
