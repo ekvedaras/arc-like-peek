@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Frame-busting fixture</title>
+    <script>
+      if (window.top !== window.self) {
+        try {
+          window.top.location.href = window.location.href;
+        } catch {
+          document.documentElement.dataset.frameBustingBlocked = "true";
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1 id="frame-busting-heading">This page tries to break out of frames</h1>
+  </body>
+</html>

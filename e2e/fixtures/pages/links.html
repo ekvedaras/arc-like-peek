@@ -6,6 +6,7 @@
     <style>
       body { font: 16px/1.5 system-ui, sans-serif; margin: 40px; }
       li { margin: 12px 0; }
+      #below-the-fold { margin-top: 1600px; }
     </style>
   </head>
   <body>
@@ -15,6 +16,12 @@
       <li><a id="framing-denied-link" href="/framing-denied.html">Page that forbids framing</a></li>
       <li><a id="blank-target-link" href="/long-page.html" target="_blank">Link with target=_blank</a></li>
       <li><a id="nested-element-link" href="/long-page.html"><span><strong>Link with nested elements</strong></span></a></li>
+      <li><a id="same-page-nested-link" href="#below-the-fold"><span><strong>Same-page anchor with nested elements</strong></span></a></li>
+      <li><a id="cross-site-link" href="{{CROSS_SITE_ORIGIN}}/peeked.html">Cross-site article</a></li>
+      <li><a id="cross-site-long-link" href="{{CROSS_SITE_ORIGIN}}/long-page.html">Cross-site long page</a></li>
+      <li><a id="cross-site-framing-denied-link" href="{{CROSS_SITE_ORIGIN}}/framing-denied.html">Cross-site page that forbids framing</a></li>
+      <li><a id="frame-busting-link" href="{{CROSS_SITE_ORIGIN}}/frame-busting.html">Cross-site page that busts out of frames</a></li>
     </ul>
+    <p id="below-the-fold">Bottom of the page, so it can scroll.</p>
   </body>
 </html>
