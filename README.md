@@ -36,7 +36,7 @@ Only `bun` is needed; always go through the package scripts.
 - `bun run check` runs all of the above; CI runs it.
 - `bun run test:real-sites` exercises live websites (needs network, not part of `check`).
 
-See `CLAUDE.md` and `CODING_STANDARDS.md` for conventions.
+See `AGENTS.md` and `CODING_STANDARDS.md` for conventions.
 
 ## Known limits
 
