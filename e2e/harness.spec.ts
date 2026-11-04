@@ -42,6 +42,7 @@ test.describe("e2e harness self-checks", () => {
     fixtureServer,
   }, testInfo) => {
     await page.goto(fixtureServer.url("/links.html"));
+    // A same-page anchor, because the extension takes over shift+clicks on links it can peek.
     const observedClick = page.evaluate(
       () =>
         new Promise<{ shiftKey: boolean; targetId: string | undefined }>((resolve) => {
@@ -57,9 +58,9 @@ test.describe("e2e harness self-checks", () => {
         }),
     );
 
-    await shiftClick(page.locator("#nested-element-link"));
+    await shiftClick(page.locator("#same-page-nested-link"));
 
-    expect(await observedClick).toEqual({ shiftKey: true, targetId: "nested-element-link" });
+    expect(await observedClick).toEqual({ shiftKey: true, targetId: "same-page-nested-link" });
     await captureScreenshot(page, testInfo, "links-after-shift-click");
   });
 });

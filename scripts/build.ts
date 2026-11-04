@@ -9,6 +9,7 @@ const OUTPUT = join(ROOT, "dist");
 const ENTRYPOINTS = [
   join(SOURCE, "background/service-worker.ts"),
   join(SOURCE, "content/content-script.ts"),
+  join(SOURCE, "content/peek-frame-script.ts"),
 ];
 
 const STATIC_ASSETS = new Bun.Glob("**/*.json");
