@@ -42,7 +42,9 @@ export function startFixtureServer(): FixtureServer {
     port: 0,
     hostname: "127.0.0.1",
     async fetch(request) {
-      const { pathname } = new URL(request.url);
+      const { pathname, searchParams } = new URL(request.url);
+      const respondAfterMs = Number(searchParams.get("respondAfterMs") ?? 0);
+      if (respondAfterMs > 0) await Bun.sleep(respondAfterMs);
       const page = Bun.file(join(PAGES_DIRECTORY, pathname === "/" ? "links.html" : pathname));
       if (pathname.includes("..") || !(await page.exists())) {
         return new Response("Not found", { status: 404 });

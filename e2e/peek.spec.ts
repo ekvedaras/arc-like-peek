@@ -152,6 +152,34 @@ test.describe("opening a peek", () => {
   });
 });
 
+test.describe("a peek of a page that is slow to show", () => {
+  test("the scrim answers at once, the pane waits briefly for the page, then flies without it", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/links.html"));
+
+    const pane = await traceAnimation(
+      page,
+      PEEK_SELECTORS.pane,
+      () => shiftClick(page.locator("#cross-site-slow-link")),
+      { durationMs: PEEK_MOTION.firstPaintWait + 900 },
+    );
+
+    const mountedAfter = pane.findLast(
+      (sample, index) => !sample.isPresent && pane[index + 1]?.isPresent,
+    );
+    if (!mountedAfter) throw new Error("The pane was there before the click");
+    const fadeIn = measureTransition(pane, "opacity");
+    expect(fadeIn.started.latestMs - mountedAfter.elapsedMs).toBeGreaterThanOrEqual(
+      PEEK_MOTION.firstPaintWait,
+    );
+    expect(measureTransition(pane, "scaleX").to).toBe(1);
+    await expectPeekPhase(page, "open");
+    await expect(peekOverlay(page).frame.locator("#peeked-heading")).toHaveCount(0);
+  });
+});
+
 test.describe("closing a peek", () => {
   test("Esc pressed inside the peeked page shrinks the peek back into its link", async ({
     page,
@@ -217,7 +245,15 @@ test.describe("closing a peek", () => {
     await devtools.send("Animation.enable");
     await devtools.send("Animation.setPlaybackRate", { playbackRate: 0 });
     await shiftClick(page.locator("#cross-site-link"));
-    await expect(peekOverlay(page).frame.locator("#peeked-heading")).toBeVisible();
+    // The pane waits for the page to paint before it flies; park it only once it has set off.
+    await expect
+      .poll(() =>
+        page.evaluate((host) => {
+          const animations = document.querySelector(host)?.shadowRoot?.getAnimations() ?? [];
+          return animations.length > 0 && animations.every((each) => each.playState === "running");
+        }, PEEK_SELECTORS.host),
+      )
+      .toBe(true);
     await page.evaluate(
       ({ host, midFlightMs }) => {
         for (const animation of document.querySelector(host)?.shadowRoot?.getAnimations() ?? []) {

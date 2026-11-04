@@ -61,6 +61,12 @@ export const PEEK_MOTION = {
   /** Distance from the target, as a share of the travel, at which a spring counts as settled. */
   springSettleTolerance: 0.001,
 
+  /**
+   * Clone decision: the scrim answers the click at once, but the pane waits for the peeked page's
+   * first contentful paint before it flies, so it flies with content as Arc's snapshot does, for
+   * at most this long; a page slower than that flies blank and fills in.
+   */
+  firstPaintWait: ms(250),
   /** Hides the blank frame while the pane is still tiny. */
   paneFadeIn: { duration: ms(130), delay: ms(0), easing: EASE_OUT } satisfies FadeTiming,
   /** The pane fades over the last part of its flight back to the link. */

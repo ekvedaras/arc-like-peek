@@ -46,6 +46,11 @@ export async function relayPeekMessage(
         });
       }
       return;
+    case "peekFrame/painted":
+      if (!fromTopFrame) {
+        await ports.notifyTopFrame(sender.tabId, { type: "peekHostNotice/framePainted" });
+      }
+      return;
     case "peekFrame/keyCommand":
       if (!fromTopFrame) {
         await ports.notifyTopFrame(sender.tabId, {

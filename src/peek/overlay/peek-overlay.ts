@@ -16,6 +16,7 @@ import {
   viewportWithinPane,
 } from "../geometry.ts";
 import type { PeekLink } from "../links.ts";
+import { PEEK_MOTION } from "../motion-tokens.ts";
 import { type PeekKeyCommand, peekKeyCommand } from "../peek-keyboard.ts";
 import type { DismissMechanism, PeekPhase } from "../peek-session.ts";
 import type { PeekableUrl } from "../peek-trigger.ts";
@@ -39,6 +40,8 @@ export type PeekOverlayIntents = {
 export type PeekOverlay = {
   readonly present: (origin: PeekOrigin) => Promise<void>;
   readonly load: (url: PeekableUrl) => void;
+  /** The peeked page has shown its first content: whatever waited for it may move now. */
+  readonly pagePainted: () => void;
   readonly dismiss: (origin: PeekOrigin) => Promise<void>;
   readonly expand: () => Promise<void>;
   readonly remove: () => void;
@@ -62,6 +65,8 @@ export function mountPeekOverlay(
   let layout: PeekLayout | null = null;
   let scrollLock: ScrollLock | null = null;
   let running: Animation[] = [];
+  let heldUntilPainted: Animation[] = [];
+  let firstPaintTimer: number | undefined;
 
   const view = document.defaultView;
   const motionPreference = (): MotionPreference =>
@@ -89,14 +94,33 @@ export function mountPeekOverlay(
     return peekOriginRect([...origin.link.getClientRects()], origin.pointer, viewport());
   };
 
+  const releaseHeldMotion = (): void => {
+    view?.clearTimeout(firstPaintTimer);
+    for (const animation of heldUntilPainted) animation.play();
+    heldUntilPainted = [];
+  };
+
   const play = (steps: readonly MotionStep[]): Promise<void> => {
     for (const animation of running) {
       animation.commitStyles();
       animation.cancel();
     }
-    running = steps.map((step) =>
-      partElement(parts, step.part).animate([...step.keyframes], { ...step.timing }),
-    );
+    heldUntilPainted = [];
+    running = steps.map((step) => {
+      const animation = partElement(parts, step.part).animate([...step.keyframes], {
+        ...step.timing,
+      });
+      if (step.cue === "oncePagePainted") {
+        // Paused at its first frame, so the part shows where it starts from until released.
+        animation.pause();
+        heldUntilPainted.push(animation);
+      }
+      return animation;
+    });
+    if (heldUntilPainted.length > 0) {
+      view?.clearTimeout(firstPaintTimer);
+      firstPaintTimer = view?.setTimeout(releaseHeldMotion, PEEK_MOTION.firstPaintWait);
+    }
     return Promise.all(running.map((animation) => animation.finished)).then(() => {});
   };
 
@@ -131,6 +155,7 @@ export function mountPeekOverlay(
     load: (url) => {
       parts.page.src = peekWindowAddressFor(url);
     },
+    pagePainted: releaseHeldMotion,
     dismiss: (origin) => {
       const pane = (layout ?? applyLayout()).pane;
       return play(dismissChoreography(pane, originRect(origin), motionPreference()));
@@ -143,8 +168,10 @@ export function mountPeekOverlay(
       return play(expandChoreography(pane, viewport(), paneNow, motionPreference()));
     },
     remove: () => {
+      view?.clearTimeout(firstPaintTimer);
       for (const animation of running) animation.cancel();
       running = [];
+      heldUntilPainted = [];
       parts.dialog.removeEventListener("cancel", onCancel);
       document.removeEventListener("keydown", onKeyDown, true);
       view?.removeEventListener("resize", onResize);

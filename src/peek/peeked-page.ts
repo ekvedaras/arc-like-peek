@@ -31,6 +31,8 @@ export function installPeekedPage(window: Window, ports: PeekedPagePorts): void 
     }),
   );
 
+  reportFirstContentfulPaint(() => report({ type: "peekFrame/painted" }));
+
   window.addEventListener(
     "keydown",
     (event) => {
@@ -68,6 +70,16 @@ export function installPeekedPage(window: Window, ports: PeekedPagePorts): void 
     },
     true,
   );
+}
+
+/** The Peek holds its flight until the page has something to show; see PEEK_MOTION.firstPaintWait. */
+function reportFirstContentfulPaint(onPainted: () => void): void {
+  const observer = new PerformanceObserver((entries) => {
+    if (entries.getEntriesByName("first-contentful-paint").length === 0) return;
+    observer.disconnect();
+    onPainted();
+  });
+  observer.observe({ type: "paint", buffered: true });
 }
 
 function hasModifier(event: MouseEvent): boolean {

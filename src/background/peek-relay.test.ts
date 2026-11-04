@@ -53,6 +53,7 @@ describe("relaying peek messages", () => {
       { type: "peekFrame/navigated", url: "https://x.example/b", historyChange: "entryAdded" },
       PEEK_FRAME,
     );
+    await relayPeekMessage(ports, { type: "peekFrame/painted" }, PEEK_FRAME);
 
     expect(ports.notifyTopFrame.mock.calls).toEqual([
       [7, { type: "peekHostNotice/keyCommand", command: "dismiss" }],
@@ -64,6 +65,7 @@ describe("relaying peek messages", () => {
           historyChange: "entryAdded",
         },
       ],
+      [7, { type: "peekHostNotice/framePainted" }],
     ]);
   });
 
