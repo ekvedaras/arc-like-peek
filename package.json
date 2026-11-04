@@ -1,5 +1,6 @@
 {
   "name": "arc-like-peek",
+  "version": "0.0.1",
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
     "@playwright/test": "1.63.0",
@@ -11,6 +12,8 @@
   "type": "module",
   "scripts": {
     "build": "bun scripts/build.ts",
+    "package": "bun scripts/package.ts",
+    "release": "bun scripts/release.ts",
     "dev": "bun scripts/build.ts --watch",
     "typecheck": "bun --bun tsc",
     "lint": "bun --bun biome check .",

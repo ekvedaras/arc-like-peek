@@ -16,6 +16,16 @@ const ENTRYPOINTS = [
 
 const STATIC_ASSETS = new Bun.Glob("**/*.{json,html,css}");
 
+// package.json is the only place the version lives; the source manifest has none.
+async function writeManifestWithPackageVersion(): Promise<void> {
+  const manifest = await Bun.file(join(SOURCE, "manifest.json")).json();
+  const { version } = await Bun.file(join(ROOT, "package.json")).json();
+  await Bun.write(
+    join(OUTPUT, "manifest.json"),
+    `${JSON.stringify({ ...manifest, version }, null, 2)}\n`,
+  );
+}
+
 async function buildExtension(): Promise<boolean> {
   await rm(OUTPUT, { recursive: true, force: true });
   await mkdir(OUTPUT, { recursive: true });
@@ -36,6 +46,7 @@ async function buildExtension(): Promise<boolean> {
   for await (const asset of STATIC_ASSETS.scan(SOURCE)) {
     await Bun.write(join(OUTPUT, asset), await Bun.file(join(SOURCE, asset)).bytes());
   }
+  await writeManifestWithPackageVersion();
   for (const [size, png] of await renderIcons()) {
     await Bun.write(join(OUTPUT, "icons", `icon-${size}.png`), png);
   }

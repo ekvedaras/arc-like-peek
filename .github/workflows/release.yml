@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches package.json version
+        run: |
+          version="$(jq -r .version package.json)"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+
+      - uses: ./.github/actions/setup
+
+      - run: bun run check
+
+      - run: bun run package
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/arc-like-peek-*.zip --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+
+      # Seam for the Chrome Web Store: add a step here that uploads artifacts/arc-like-peek-*.zip
+      # (needs store credentials as repository secrets) once the listing exists.

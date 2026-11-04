@@ -10,7 +10,13 @@ An Arc-style Peek for Chrome: shift+click a link and the page opens in an animat
 - Navigate inside the Peek; Esc, a click outside or the close button dismisses it.
 - Expand the Peek into a regular tab.
 
-## Install
+## Install from a release
+
+1. Download `arc-like-peek-<version>.zip` from the [latest release](https://github.com/ekvedaras/arc-like-peek/releases/latest).
+2. Unzip it into a folder you will keep (Chrome loads the extension from there).
+3. Open `chrome://extensions`, enable Developer mode, choose "Load unpacked" and select that folder.
+
+## Install from source
 
 Requires [Bun](https://bun.sh).
 
@@ -38,6 +44,20 @@ Only `bun` is needed; always go through the package scripts.
 - `bun run test:real-sites` exercises live websites (needs network, not part of `check`).
 
 See `AGENTS.md` and `CODING_STANDARDS.md` for conventions.
+
+## Releasing
+
+The version lives only in `package.json`; the build writes it into `dist/manifest.json`.
+
+```sh
+bun run release 0.2.0                 # bumps package.json, commits "Release 0.2.0", tags v0.2.0
+git push origin main v0.2.0           # the tag push triggers .github/workflows/release.yml
+```
+
+The workflow runs `bun run check`, fails if the tag differs from the `package.json` version, runs `bun run package`
+and creates a GitHub Release with `arc-like-peek-<version>.zip` and generated notes. `bun run package` can also be run
+locally; it writes `artifacts/arc-like-peek-<version>.zip` with `manifest.json` at the zip root. The last step of the
+workflow is the place to add a Chrome Web Store upload.
 
 ## Known limits
 
