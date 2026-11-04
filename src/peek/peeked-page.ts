@@ -1,7 +1,8 @@
 import type { PeekFrameReport } from "../messaging/peek-messages.ts";
 import { isPeekLink } from "./links.ts";
 import { peekKeyCommand } from "./peek-keyboard.ts";
-import { isPeekGesture } from "./peek-trigger.ts";
+import { asPeekableUrl, isPeekGesture } from "./peek-trigger.ts";
+import { framableUrl } from "./peek-window-address.ts";
 
 export type PeekedPagePorts = {
   readonly report: (report: PeekFrameReport) => Promise<void>;
@@ -40,17 +41,26 @@ export function installPeekedPage(window: Window, ports: PeekedPagePorts): void 
   );
 
   // The frame is sandboxed against navigating the page behind it, so links that target it stay here.
+  // Plain-http links are upgraded, because the Peek window would block them as mixed content.
   window.addEventListener(
     "click",
     (event) => {
       const link = event.composedPath().find(isPeekLink);
       if (!(link && event.isTrusted)) return;
+      const url = asPeekableUrl(link.href);
+      if (!url) return;
       const navigatesOutOfPeek = link.target === "_top" || link.target === "_parent";
-      if (isPeekGesture(event) || (navigatesOutOfPeek && event.button === 0)) {
+      const isPlainClick = event.button === 0 && !hasModifier(event);
+      const needsUpgrade = framableUrl(url) !== url;
+      if (isPeekGesture(event) || (isPlainClick && (navigatesOutOfPeek || needsUpgrade))) {
         event.preventDefault();
-        window.location.assign(link.href);
+        window.location.assign(framableUrl(url));
       }
     },
     true,
   );
+}
+
+function hasModifier(event: MouseEvent): boolean {
+  return event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
 }

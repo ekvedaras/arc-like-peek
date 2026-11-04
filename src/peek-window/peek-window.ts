@@ -1,7 +1,7 @@
 import { sendToServiceWorker } from "../content/extension-messaging-adapter.ts";
 import { PEEK_FRAME_NAME } from "../messaging/peek-messages.ts";
 import { peekKeyCommand } from "../peek/peek-keyboard.ts";
-import { peekedUrlFrom } from "../peek/peek-window-address.ts";
+import { framableUrl, peekedUrlFrom } from "../peek/peek-window-address.ts";
 import { PEEKED_PAGE_PERMISSIONS } from "../peek/peeked-page-permissions.ts";
 
 /**
@@ -29,7 +29,7 @@ if (url) {
   peekedPage.title = "Peeked page";
   peekedPage.setAttribute("sandbox", PEEKED_PAGE_SANDBOX);
   peekedPage.allow = PEEKED_PAGE_PERMISSIONS;
-  peekedPage.src = url;
+  peekedPage.src = framableUrl(url);
   document.body.append(peekedPage);
 
   // The Peek focuses this window when it opens; keys belong to the page the user is peeking at.
