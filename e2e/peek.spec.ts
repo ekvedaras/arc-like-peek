@@ -278,6 +278,82 @@ test.describe("expanding a peek into a tab", () => {
     await expectNoPeek(page);
   });
 
+  test("expanding lays the page out like its tab at once and holds it still while the pane grows", async ({
+    page,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/links.html"));
+    await openPeek(page, "#cross-site-link");
+    await expect(peekOverlay(page).frame.locator("#peeked-heading")).toBeVisible();
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error("No viewport");
+    const fullPage = { x: 0, y: 0, ...viewport };
+    const paneRect = peekLayout(viewport).pane;
+
+    const frame = await traceAnimation(
+      page,
+      PEEK_SELECTORS.frame,
+      () => peekOverlay(page).expandButton.click(),
+      { durationMs: 600 },
+    );
+
+    const frames = presentSamples(frame);
+    const isAt = (rect: AnimationSample["rect"], expected: typeof fullPage) =>
+      [
+        rect.x - expected.x,
+        rect.y - expected.y,
+        rect.width - expected.width,
+        rect.height - expected.height,
+      ].every((difference) => Math.abs(difference) <= PIXEL_TOLERANCE);
+    const firstExpanded = frames.findIndex((sample) => !isAt(sample.rect, paneRect));
+    expect(firstExpanded).toBeGreaterThanOrEqual(0);
+    for (const sample of frames.slice(firstExpanded)) expectRectNear(sample.rect, fullPage);
+  });
+
+  test("the tab a peek expands into loads out of sight, then takes over", async ({
+    page,
+    context,
+    extensionServiceWorker,
+    fixtureServer,
+  }) => {
+    await page.goto(fixtureServer.url("/links.html"));
+    await openPeek(page, "#cross-site-link");
+    // Headless Playwright reports every page as visible, so ask Chrome which tab is active instead.
+    await extensionServiceWorker.evaluate(() => {
+      const events: { what: string; atMs: number }[] = [];
+      const record = (what: string) => events.push({ what, atMs: performance.now() });
+      Reflect.set(globalThis, "expandedTabEvents", events);
+      chrome.tabs.onCreated.addListener((tab) => record(`created active=${tab.active}`));
+      chrome.tabs.onUpdated.addListener((_tabId, change, tab) => {
+        if (change.status === "complete") record(`loaded active=${tab.active}`);
+      });
+      chrome.tabs.onActivated.addListener(() => record("switched to"));
+    });
+
+    const newTab = context.waitForEvent("page");
+    await peekOverlay(page).expandButton.click();
+    const tab = await newTab;
+
+    await expect(tab).toHaveURL(fixtureServer.crossSiteUrl("/peeked.html"));
+    await expectNoPeek(page);
+    const events: { what: string; atMs: number }[] = await extensionServiceWorker.evaluate(() =>
+      Reflect.get(globalThis, "expandedTabEvents"),
+    );
+    const [created, ...later] = events;
+    expect(created?.what).toBe("created active=false");
+    const switched = later.find((event) => event.what === "switched to");
+    if (!(created && switched)) throw new Error("Chrome never switched to the new tab");
+    const loadedOutOfSight = later.some(
+      (event) => event.what === "loaded active=false" && event.atMs <= switched.atMs,
+    );
+    // A tab still loading is only switched to once the longest wait is over.
+    if (!loadedOutOfSight) {
+      expect(switched.atMs - created.atMs).toBeGreaterThanOrEqual(
+        PEEK_MOTION.tabHandoverMaxWait - 1,
+      );
+    }
+  });
+
   test("links inside the peek navigate the peek, and expanding opens where the user went", async ({
     page,
     context,

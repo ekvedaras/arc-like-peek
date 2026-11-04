@@ -76,6 +76,50 @@ export function transformOnto(box: Rect, target: Rect): BoxTransform {
   };
 }
 
+/** `from` moved `progress` of the way to `to`; progress may overshoot 1 for springs. */
+export function interpolateTransform(
+  from: BoxTransform,
+  to: BoxTransform,
+  progress: number,
+): BoxTransform {
+  const between = (start: number, end: number): number => start + (end - start) * progress;
+  return {
+    translateX: between(from.translateX, to.translateX),
+    translateY: between(from.translateY, to.translateY),
+    scaleX: between(from.scaleX, to.scaleX),
+    scaleY: between(from.scaleY, to.scaleY),
+  };
+}
+
+/** Where a box covering the whole viewport sits inside the pane, in the pane's own coordinates. */
+export function viewportWithinPane(pane: Rect, viewport: Rect): Rect {
+  return {
+    x: viewport.x - pane.x,
+    y: viewport.y - pane.y,
+    width: viewport.width,
+    height: viewport.height,
+  };
+}
+
+/**
+ * The transform that holds a box laid out at `viewportWithinPane` exactly over the viewport while
+ * the pane around it wears `paneTransform`: the pane moves and grows, its content stays put.
+ */
+export function pinnedToViewport(
+  pane: Rect,
+  viewport: Rect,
+  paneTransform: BoxTransform,
+): BoxTransform {
+  const offsetX = viewport.x - pane.x;
+  const offsetY = viewport.y - pane.y;
+  return {
+    translateX: (offsetX - paneTransform.translateX) / paneTransform.scaleX - offsetX,
+    translateY: (offsetY - paneTransform.translateY) / paneTransform.scaleY - offsetY,
+    scaleX: 1 / paneTransform.scaleX,
+    scaleY: 1 / paneTransform.scaleY,
+  };
+}
+
 /** The transform that scales a box laid out at `box` by `factor` around its own centre. */
 export function scaleAboutCentre(box: Rect, factor: number): BoxTransform {
   return {

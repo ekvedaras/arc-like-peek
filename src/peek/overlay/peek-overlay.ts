@@ -6,7 +6,15 @@ import {
   type OverlayPart,
   openChoreography,
 } from "../choreography.ts";
-import { type PeekLayout, type Point, peekLayout, peekOriginRect, type Rect } from "../geometry.ts";
+import {
+  type BoxTransform,
+  type PeekLayout,
+  type Point,
+  peekLayout,
+  peekOriginRect,
+  type Rect,
+  viewportWithinPane,
+} from "../geometry.ts";
 import type { PeekLink } from "../links.ts";
 import { type PeekKeyCommand, peekKeyCommand } from "../peek-keyboard.ts";
 import type { DismissMechanism, PeekPhase } from "../peek-session.ts";
@@ -129,7 +137,10 @@ export function mountPeekOverlay(
     },
     expand: () => {
       const pane = (layout ?? applyLayout()).pane;
-      return play(expandChoreography(pane, viewport(), motionPreference()));
+      const paneNow = currentTransformOf(parts.pane);
+      // One reflow, into the layout the tab will have, before anything moves; never during the motion.
+      placeAt(parts.page, viewportWithinPane(pane, viewport()));
+      return play(expandChoreography(pane, viewport(), paneNow, motionPreference()));
     },
     remove: () => {
       for (const animation of running) animation.cancel();
@@ -226,6 +237,12 @@ function placeAt(target: HTMLElement, rect: Rect): void {
   target.style.top = `${rect.y}px`;
   target.style.width = `${rect.width}px`;
   target.style.height = `${rect.height}px`;
+}
+
+function currentTransformOf(target: HTMLElement): BoxTransform {
+  const { transform } = getComputedStyle(target);
+  const matrix = new DOMMatrixReadOnly(transform === "none" ? undefined : transform);
+  return { translateX: matrix.e, translateY: matrix.f, scaleX: matrix.a, scaleY: matrix.d };
 }
 
 function partElement(parts: OverlayParts, part: OverlayPart): HTMLElement {

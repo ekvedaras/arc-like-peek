@@ -6,12 +6,22 @@ import {
 import { framingAllowanceFor } from "./peek-framing-policy.ts";
 import { type PeekRelayPorts, relayPeekMessage } from "./peek-relay.ts";
 import { onExtensionStarted, onPeekMessage } from "./runtime-adapter.ts";
-import { notifyTopFrame, onTabClosed, onTopFrameNavigated, openTabNextTo } from "./tabs-adapter.ts";
+import {
+  notifyTopFrame,
+  onTabClosed,
+  onTopFrameNavigated,
+  openBackgroundTabNextTo,
+  switchToTab,
+  tabFinishedLoading,
+} from "./tabs-adapter.ts";
 
 const ports: PeekRelayPorts = {
   grantFraming: grantFramingAllowance,
   withdrawFraming: withdrawFramingAllowance,
-  openTabNextTo,
+  openBackgroundTabNextTo,
+  tabFinishedLoading,
+  switchToTab,
+  elapse: (duration) => new Promise((resolve) => setTimeout(resolve, duration)),
   notifyTopFrame,
 };
 

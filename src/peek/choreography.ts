@@ -2,6 +2,8 @@ import {
   type BoxTransform,
   cssTransform,
   IDENTITY_TRANSFORM,
+  interpolateTransform,
+  pinnedToViewport,
   type Rect,
   scaleAboutCentre,
   transformOnto,
@@ -32,6 +34,10 @@ const CLOSE_CURVE = springCurve(PEEK_MOTION.closeSpring, PEEK_MOTION.springSettl
 const EXPAND_CURVE = springCurve(PEEK_MOTION.expandSpring, PEEK_MOTION.springSettleTolerance);
 
 export const PEEK_OPEN_CURVE: SpringCurve = OPEN_CURVE;
+export const PEEK_EXPAND_CURVE: SpringCurve = EXPAND_CURVE;
+
+/** Enough samples of the expand spring that the page held inside the pane moves by under a pixel. */
+const EXPAND_KEYFRAMES = 32;
 
 /** The pane grows out of the link while the scrim fades in, then the controls pop in. */
 export function openChoreography(
@@ -79,27 +85,55 @@ export function dismissChoreography(
 }
 
 /**
- * The pane grows to cover the viewport, then the page it shows is opened as a tab. The page inside
- * is counter-scaled so it keeps its proportions instead of stretching with the pane.
+ * The pane grows from where it is now to cover the viewport, like a window opening onto the tab it
+ * becomes: the page inside is already laid out over the whole viewport (see `viewportWithinPane`)
+ * and is held still on screen while the pane uncovers it, so nothing reflows or stretches.
  */
 export function expandChoreography(
   pane: Rect,
   viewport: Rect,
+  paneNow: BoxTransform,
   motion: MotionPreference,
 ): readonly MotionStep[] {
   if (motion === "reduced") return crossfadeOut();
 
   const growth = transformOnto(pane, viewport);
-  const counterScale: BoxTransform = {
-    translateX: 0,
-    translateY: 0,
-    scaleX: 1 / growth.scaleX,
-    scaleY: 1 / growth.scaleY,
-  };
+  // Holding the page still needs the exact inverse of the pane at every moment, which two
+  // interpolated keyframes cannot express, so both follow the spring through the same samples.
+  const moments = Array.from({ length: EXPAND_KEYFRAMES + 1 }, (_, index) => {
+    const offset = index / EXPAND_KEYFRAMES;
+    return { offset, pane: interpolateTransform(paneNow, growth, EXPAND_CURVE.progressAt(offset)) };
+  });
+  const timing = {
+    duration: EXPAND_CURVE.duration,
+    delay: ms(0),
+    easing: "linear",
+    fill: "forwards",
+  } as const;
   return [
     fadeTo("scrim", 0, PEEK_MOTION.scrimFadeOut),
-    springTo("pane", growth, EXPAND_CURVE),
-    springTo("page", counterScale, EXPAND_CURVE),
+    {
+      part: "pane",
+      keyframes: moments.map(({ offset, pane: transform }) => ({
+        offset,
+        transform: cssTransform(transform),
+      })),
+      timing,
+    },
+    {
+      part: "page",
+      keyframes: moments.map(({ offset, pane: transform }) => ({
+        offset,
+        transform: cssTransform(pinnedToViewport(pane, viewport, transform)),
+      })),
+      timing,
+    },
+    // A separate animation, so the transforms above stay on the compositor.
+    {
+      part: "pane",
+      keyframes: [{ borderRadius: "0px" }],
+      timing: { ...timing, easing: EXPAND_CURVE.cssEasing },
+    },
     fadeTo("controls", 0, PEEK_MOTION.controlsDisappear),
   ];
 }

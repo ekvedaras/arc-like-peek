@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { peekLayout, peekOriginRect, scaleAboutCentre, transformOnto } from "./geometry.ts";
+import {
+  type BoxTransform,
+  IDENTITY_TRANSFORM,
+  interpolateTransform,
+  peekLayout,
+  peekOriginRect,
+  pinnedToViewport,
+  scaleAboutCentre,
+  transformOnto,
+  viewportWithinPane,
+} from "./geometry.ts";
 
 describe("peek layout", () => {
   test("centres a pane 82 % of the viewport wide, 8 px from top and bottom", () => {
@@ -81,5 +91,39 @@ describe("where a peek grows from", () => {
     expect(peekOriginRect([], null, viewport)).toBeNull();
     expect(peekOriginRect([{ x: 0, y: 900, width: 50, height: 20 }], null, viewport)).toBeNull();
     expect(peekOriginRect([{ x: 10, y: 10, width: 0, height: 0 }], null, viewport)).toBeNull();
+  });
+});
+
+describe("content pinned to the viewport inside a growing pane", () => {
+  const pane = { x: 115, y: 8, width: 1050, height: 784 };
+  const viewport = { x: 0, y: 0, width: 1280, height: 800 };
+
+  const onScreen = (paneTransform: BoxTransform, point: { x: number; y: number }) => {
+    const content = pinnedToViewport(pane, viewport, paneTransform);
+    const inside = viewportWithinPane(pane, viewport);
+    const inPane = {
+      x: inside.x + content.translateX + content.scaleX * point.x,
+      y: inside.y + content.translateY + content.scaleY * point.y,
+    };
+    return {
+      x: pane.x + paneTransform.translateX + paneTransform.scaleX * inPane.x,
+      y: pane.y + paneTransform.translateY + paneTransform.scaleY * inPane.y,
+    };
+  };
+
+  test("stays where the viewport is at every step of the growth", () => {
+    const growth = transformOnto(pane, viewport);
+    for (const progress of [0, 0.3, 0.7, 1, 1.02]) {
+      const paneTransform = interpolateTransform(IDENTITY_TRANSFORM, growth, progress);
+      for (const point of [
+        { x: 0, y: 0 },
+        { x: 640, y: 400 },
+        { x: 1280, y: 800 },
+      ]) {
+        const projected = onScreen(paneTransform, point);
+        expect(projected.x).toBeCloseTo(point.x, 6);
+        expect(projected.y).toBeCloseTo(point.y, 6);
+      }
+    }
   });
 });

@@ -53,6 +53,11 @@ export const PEEK_MOTION = {
   closeSpring: { response: ms(220), dampingRatio: 1 } satisfies Spring,
   /** GUESS: grow to fill the viewport before handing over to a real tab. */
   expandSpring: { response: ms(240), dampingRatio: 1 } satisfies Spring,
+  /**
+   * Clone decision: after expanding, the new tab loads in the background behind the expanded Peek and
+   * is switched to once loaded, or after this long at most.
+   */
+  tabHandoverMaxWait: ms(1_000),
   /** Distance from the target, as a share of the travel, at which a spring counts as settled. */
   springSettleTolerance: 0.001,
 

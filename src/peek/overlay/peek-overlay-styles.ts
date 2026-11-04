@@ -72,6 +72,9 @@ export const PEEK_OVERLAY_STYLES = `
 }
 
 .peek-page {
+  position: absolute;
+  left: 0;
+  top: 0;
   display: block;
   width: 100%;
   height: 100%;
