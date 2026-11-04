@@ -111,6 +111,9 @@ export function mountPeekOverlay(
     present: (origin) => {
       parts.dialog.addEventListener("cancel", onCancel);
       document.addEventListener("keydown", onKeyDown, true);
+      // Focus moves into the frame, whose blank placeholder no script of ours watches until the Peek
+      // window has loaded; Esc must still close a Peek that is only just opening.
+      parts.page.contentWindow?.addEventListener("keydown", onKeyDown, true);
       view?.addEventListener("resize", onResize);
       scrollLock = lockPageScroll(document);
       parts.dialog.showModal();
