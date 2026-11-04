@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      # Playwright 1.63.0 uses Chromium revision 1243 (see wiki/environment/e2e-harness.md).
+      - uses: actions/cache@v4
+        id: playwright-browser
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-1243-${{ runner.os }}
+
+      - name: Install Chromium
+        if: steps.playwright-browser.outputs.cache-hit != 'true'
+        run: bun --bun playwright install --with-deps chromium
+
+      - name: Install Chromium system libraries
+        if: steps.playwright-browser.outputs.cache-hit == 'true'
+        run: bun --bun playwright install-deps chromium
+
+      - run: bun run check
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: artifacts
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
